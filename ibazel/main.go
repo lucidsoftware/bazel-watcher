@@ -112,7 +112,7 @@ func main() {
 
 	i, err := New()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating iBazel", err)
+		fmt.Fprintf(os.Stderr, "Error creating iBazel: %s\n", err)
 		os.Exit(1)
 	}
 	i.SetDebounceDuration(*debounceDuration)

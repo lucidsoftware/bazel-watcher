@@ -34,15 +34,16 @@ go_library(
         "lifecycle.go",
         "main.go",
         "source_event_handler.go",
-        "workspace_finder.go"
     ],
     importpath = "github.com/bazelbuild/bazel-watcher/ibazel",
     visibility = ["//visibility:private"],
     deps = [
         "//bazel:go_default_library",
         "//ibazel/command:go_default_library",
+        "//ibazel/output_runner:go_default_library",
         "//ibazel/profiler:go_default_library",
         "//ibazel/live_reload:go_default_library",
+        "//ibazel/workspace_finder:go_default_library",
         "//third_party/bazel/master/src/main/protobuf:go_default_library",
         "@com_github_fsnotify_fsnotify//:go_default_library",
     ],
