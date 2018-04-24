@@ -180,7 +180,7 @@ func (b *bazel) Query(args ...string) (*blaze_query.QueryResult, error) {
 func (b *bazel) processQuery(out []byte) (*blaze_query.QueryResult, error) {
 	var qr blaze_query.QueryResult
 	if err := proto.Unmarshal(out, &qr); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not read blaze query response. Output: %s\n", out)
+		fmt.Fprintf(os.Stderr, "Could not read blaze query response. Error: %s\nOutput: %s\n", err, out)
 		return nil, err
 	}
 
