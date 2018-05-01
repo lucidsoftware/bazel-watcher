@@ -60,7 +60,7 @@ func TestDefaultCommand(t *testing.T) {
 	}
 
 	// This is synonymous with killing the job so use it to kill the job and test everything.
-	c.NotifyOfChanges()
+	c.NotifyOfChanges(nil)
 	assertKilled(t, toKill.RootProcess())
 }
 
@@ -77,7 +77,7 @@ func TestDefaultCommand_Start(t *testing.T) {
 
 	b := &mock_bazel.MockBazel{}
 
-	_, pg := start(b, "//path/to:target", []string{"moo"})
+	_, pg := start(b, "//path/to:target", []string{"moo"}, nil)
 	pg.Start()
 
 	if pg.RootProcess().Stdout != os.Stdout {

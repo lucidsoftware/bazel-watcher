@@ -68,14 +68,14 @@ type mockCommand struct {
 	terminated        bool
 }
 
-func (m *mockCommand) Start() (*bytes.Buffer, error) {
+func (m *mockCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	if m.started {
 		panic("Can't run command twice")
 	}
 	m.started = true
 	return nil, nil
 }
-func (m *mockCommand) NotifyOfChanges() *bytes.Buffer {
+func (m *mockCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 	m.notifiedOfChanges = true
 	return nil
 }
@@ -183,6 +183,81 @@ func TestIBazelLoop(t *testing.T) {
 	i.state = QUERY
 	step := func() {
 		i.iteration("demo", command, []string{}, "")
+	}
+	assertRun := func() {
+		if called == false {
+			_, file, line, _ := runtime.Caller(1) // decorate + log + public function.
+			t.Errorf("%s:%v Should have run the provided comand", file, line)
+		}
+		called = false
+	}
+	assertState := func(state State) {
+		if i.state != state {
+			_, file, line, _ := runtime.Caller(1) // decorate + log + public function.
+			t.Errorf("%s:%v Expected state to be %s but was %s", file, line, state, i.state)
+		}
+	}
+
+	// Pretend a fairly normal event chain happens.
+	// Start, run the program, write a source file, run, write a build file, run.
+
+	assertState(QUERY)
+	step()
+	i.filesWatched[i.buildFileWatcher] = map[string]struct{}{"/path/to/BUILD": struct{}{}}
+	i.filesWatched[i.sourceFileWatcher] = map[string]struct{}{"/path/to/foo": struct{}{}}
+	assertState(RUN)
+	step() // Actually run the command
+	assertRun()
+	assertState(WAIT)
+	// Source file change.
+	i.sourceEventHandler.SourceFileEvents <- fsnotify.Event{Op: fsnotify.Write, Name: "/path/to/foo"}
+	step()
+	assertState(DEBOUNCE_RUN)
+	step()
+	// Don't send another event in to test the timer
+	assertState(RUN)
+	step() // Actually run the command
+	assertRun()
+	assertState(WAIT)
+	// Build file change.
+	i.buildFileWatcher.Events() <- fsnotify.Event{Op: fsnotify.Write, Name: "/path/to/BUILD"}
+	step()
+	assertState(DEBOUNCE_QUERY)
+	// Don't send another event in to test the timer
+	step()
+	assertState(QUERY)
+	step()
+	assertState(RUN)
+	step() // Actually run the command
+	assertRun()
+	assertState(WAIT)
+}
+
+func TestIBazelLoopMultiple(t *testing.T) {
+	i := newIBazel(t)
+
+	// Replace the file watching channel with one that has a buffer.
+	i.buildFileWatcher = &fakeFSNotifyWatcher{
+		EventChan: make(chan fsnotify.Event, 1),
+	}
+	i.sourceEventHandler.SourceFileEvents = make(chan fsnotify.Event, 1)
+
+	defer i.Cleanup()
+
+	// The process for testing this is going to be to emit events to the channels
+	// that are associated with these objects and walk the state transition
+	// graph.
+
+	// First let's consume all the events from all the channels we care about
+	called := false
+	command := func(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
+		called = true
+		return nil, nil
+	}
+
+	i.state = QUERY
+	step := func() {
+		i.iterationMultiple("demo", command, []string{}, [][]string{}, 0)
 	}
 	assertRun := func() {
 		if called == false {
@@ -342,7 +417,7 @@ func TestHandleSignals_SIGINT(t *testing.T) {
 	// dead to test the job not responding)
 	for j := 0; j < 2; j++ {
 		cmd = &mockCommand{}
-		cmd.Start()
+		cmd.Start(nil)
 		i.cmd = cmd
 
 		// This should kill the subprocess and simulate hitting ctrl-c
@@ -379,7 +454,7 @@ func TestHandleSignals_SIGTERM(t *testing.T) {
 	attemptedExit = false
 
 	cmd := &mockCommand{}
-	cmd.Start()
+	cmd.Start(nil)
 	i.cmd = cmd
 
 	i.sigs <- syscall.SIGTERM
