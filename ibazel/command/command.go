@@ -33,15 +33,15 @@ var bazelNew = bazel.New
 // Command is an object that wraps the logic of running a task in Bazel and
 // manipulating it.
 type Command interface {
-	Start() (*bytes.Buffer, error)
+	Start(logFile *os.File) (*bytes.Buffer, error)
 	Terminate()
-	NotifyOfChanges() *bytes.Buffer
+	NotifyOfChanges(logFile *os.File) *bytes.Buffer
 	IsSubprocessRunning() bool
 }
 
 // start will be called by most implementations since this logic is extremely
 // common.
-func start(b bazel.Bazel, target string, args []string) (*bytes.Buffer, process_group.ProcessGroup) {
+func start(b bazel.Bazel, target string, args []string, logFile *os.File) (*bytes.Buffer, process_group.ProcessGroup) {
 	var filePattern strings.Builder
 	filePattern.WriteString("bazel_script_path*")
 	if runtime.GOOS == "windows" {
@@ -65,8 +65,13 @@ func start(b bazel.Bazel, target string, args []string) (*bytes.Buffer, process_
 	// Now that we have built the target, construct a executable form of it for
 	// execution in a go routine.
 	cmd := execCommand(runScriptPath, args...)
-	cmd.RootProcess().Stdout = os.Stdout
-	cmd.RootProcess().Stderr = os.Stderr
+	if logFile != nil {
+		cmd.RootProcess().Stdout = logFile
+		cmd.RootProcess().Stderr = logFile
+	} else {
+		cmd.RootProcess().Stdout = os.Stdout
+		cmd.RootProcess().Stderr = os.Stderr
+	}
 
 	return outputBuffer, cmd
 }

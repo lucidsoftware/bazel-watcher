@@ -111,7 +111,7 @@ func isOverrideableBazelFlag(arg string) bool {
 	return isOverrideable(arg, overrideableBazelFlags)
 }
 
-func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string) {
+func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, debugArgs [][]string) {
 	afterDoubleDash := false
 	for _, arg := range in {
 		if afterDoubleDash {
@@ -131,7 +131,16 @@ func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string) {
 				bazelArgs = append(bazelArgs, arg)
 			} else {
 				// If none of those things then it's probably a target.
-				targets = append(targets, arg)
+				if strings.HasPrefix(arg, "--arg") {
+					parsedArg := strings.Replace(arg, "--arg=", "", -1)
+					if strings.Contains(parsedArg, " ") {
+						parsedArg = "\"" + parsedArg + "\""
+					}
+					debugArgs[len(debugArgs)-1] = append(debugArgs[len(debugArgs)-1], parsedArg)
+				} else {
+					targets = append(targets, arg)
+					debugArgs = append(debugArgs, []string{})
+				}
 			}
 		}
 	}
@@ -179,7 +188,7 @@ func main() {
 }
 
 func handle(i *IBazel, command string, args []string) {
-	targets, startupArgs, bazelArgs, args := parseArgs(args)
+	targets, startupArgs, bazelArgs, args, debugArgs := parseArgs(args)
 	i.SetStartupArgs(startupArgs)
 	i.SetBazelArgs(bazelArgs)
 
@@ -191,6 +200,8 @@ func handle(i *IBazel, command string, args []string) {
 	case "run":
 		// Run only takes one argument
 		i.Run(targets[0], args)
+	case "mrun":
+		i.RunMulitple(args, targets, debugArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "Asked me to perform %s. I don't know how to do that.", command)
 		usage()
