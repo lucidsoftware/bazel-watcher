@@ -61,7 +61,7 @@ func (c *defaultCommand) Kill() {
 	}
 }
 
-func (c *defaultCommand) Start() (*bytes.Buffer, error) {
+func (c *defaultCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	b := bazelNew()
 	b.SetStartupArgs(c.startupArgs)
 	b.SetArguments(c.bazelArgs)
@@ -70,7 +70,7 @@ func (c *defaultCommand) Start() (*bytes.Buffer, error) {
 	b.WriteToStdout(true)
 
 	var outputBuffer *bytes.Buffer
-	outputBuffer, c.pg = start(b, c.target, c.args)
+	outputBuffer, c.pg = start(b, c.target, c.args, logFile)
 
 	c.pg.RootProcess().Env = os.Environ()
 
@@ -84,10 +84,10 @@ func (c *defaultCommand) Start() (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
-func (c *defaultCommand) NotifyOfChanges() *bytes.Buffer {
+func (c *defaultCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 	c.Terminate()
-	c.Start()
-	return nil
+	outputBuffer, _ := c.Start(logFile)
+	return outputBuffer
 }
 
 func (c *defaultCommand) IsSubprocessRunning() bool {
