@@ -17,10 +17,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -41,9 +43,11 @@ var osExit = os.Exit
 var bazelNew = bazel.New
 var commandDefaultCommand = command.DefaultCommand
 var commandNotifyCommand = command.NotifyCommand
+var mrunToFiles = flag.Bool("mrunToFiles", false, "Log mrun to file for simpler log reading")
 
 type State string
 type runnableCommand func(...string) (*bytes.Buffer, error)
+type runnableCommands func([]string, [][]string, int) ([]*bytes.Buffer, error)
 
 const (
 	DEBOUNCE_QUERY State = "DEBOUNCE_QUERY"
@@ -60,10 +64,16 @@ const buildQuery = "buildfiles(deps(set(%s)))"
 type IBazel struct {
 	debounceDuration time.Duration
 
-	cmd         command.Command
-	args        []string
-	bazelArgs   []string
-	startupArgs []string
+	cmd              command.Command
+	cmds             map[string]command.Command
+	logFiles         map[string]*os.File
+	srcDirToWatch    map[string][]string
+	bldDirToWatch    map[string][]string
+	prevDir          string
+	firstBuildPassed bool
+	args             []string
+	bazelArgs        []string
+	startupArgs      []string
 
 	sigs           chan os.Signal // Signals channel for the current process
 	interruptCount int
@@ -88,9 +98,13 @@ func New() (*IBazel, error) {
 		return nil, err
 	}
 
+	i.firstBuildPassed = false
 	i.debounceDuration = 100 * time.Millisecond
 	i.filesWatched = map[fSNotifyWatcher]map[string]struct{}{}
 	i.workspaceFinder = &workspace_finder.MainWorkspaceFinder{}
+
+	i.srcDirToWatch = map[string][]string{}
+	i.bldDirToWatch = map[string][]string{}
 
 	i.sigs = make(chan os.Signal, 1)
 	signal.Notify(i.sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -127,6 +141,11 @@ func (i *IBazel) handleSignals() {
 
 	switch sig {
 	case syscall.SIGINT:
+		for _, cmd := range i.cmds {
+			if cmd.IsSubprocessRunning() {
+				cmd.Terminate()
+			}
+		}
 		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			log.NewLine()
 			log.Log("Subprocess killed from getting SIGINT (trigger SIGINT again to stop ibazel)")
@@ -136,6 +155,11 @@ func (i *IBazel) handleSignals() {
 		}
 		break
 	case syscall.SIGTERM:
+		for _, cmd := range i.cmds {
+			if cmd.IsSubprocessRunning() {
+				cmd.Terminate()
+			}
+		}
 		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			log.NewLine()
 			log.Log("Subprocess killed from getting SIGTERM")
@@ -144,6 +168,11 @@ func (i *IBazel) handleSignals() {
 		osExit(3)
 		return
 	case syscall.SIGHUP:
+		for _, cmd := range i.cmds {
+			if cmd.IsSubprocessRunning() {
+				cmd.Terminate()
+			}
+		}
 		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			log.NewLine()
 			log.Log("Subprocess killed from getting SIGHUP")
@@ -252,6 +281,13 @@ func (i *IBazel) Run(target string, args []string) error {
 	return i.loop("run", i.run, []string{target})
 }
 
+// Run the specified target (singular) in the IBazel loop.
+func (i *IBazel) RunMulitple(args, target []string, debugArgs [][]string) error {
+	i.args = args
+	argsLength := len(args)
+	return i.loopMultiple("run", i.runMulitple, target, debugArgs, argsLength)
+}
+
 // Build the specified targets in the IBazel loop.
 func (i *IBazel) Build(targets ...string) error {
 	return i.loop("build", i.build, targets)
@@ -268,6 +304,15 @@ func (i *IBazel) loop(command string, commandToRun runnableCommand, targets []st
 	i.state = QUERY
 	for {
 		i.iteration(command, commandToRun, targets, joinedTargets)
+	}
+
+	return nil
+}
+
+func (i *IBazel) loopMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) error {
+	i.state = QUERY
+	for {
+		i.iterationMultiple(command, commandToRun, targets, debugArgs, argsLength)
 	}
 
 	return nil
@@ -329,6 +374,81 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 	}
 }
 
+func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
+	fmt.Fprintf(os.Stderr, "State: %s\n", i.state)
+	switch i.state {
+	case WAIT:
+		select {
+		case e := <-i.sourceEventHandler.SourceFileEvents:
+			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
+				fmt.Fprintf(os.Stderr, "\nChanged: %q. Rebuilding...\n", e.Name)
+				i.changeDetected(targets, "source", e.Name)
+				i.state = DEBOUNCE_RUN
+			}
+		case e := <-i.buildFileWatcher.Events():
+			if _, ok := i.filesWatched[i.buildFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
+				fmt.Fprintf(os.Stderr, "\nBuild graph changed: %q. Requerying...\n", e.Name)
+				i.changeDetected(targets, "graph", e.Name)
+				i.state = DEBOUNCE_QUERY
+			}
+		}
+	case DEBOUNCE_QUERY:
+		select {
+		case e := <-i.buildFileWatcher.Events():
+			if _, ok := i.filesWatched[i.buildFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
+				i.changeDetected(targets, "graph", e.Name)
+			}
+			i.prevDir, _ = filepath.Split(e.Name)
+			i.state = DEBOUNCE_QUERY
+		case <-time.After(i.debounceDuration):
+			i.state = QUERY
+		}
+	case QUERY:
+		// Query for which files to watch.
+		fmt.Fprintf(os.Stderr, "Querying for BUILD files...\n")
+		var toQuery []string
+		if i.prevDir != "" {
+			toQuery := make([]string, len(i.bldDirToWatch[i.prevDir]))
+			copy(toQuery, i.bldDirToWatch[i.prevDir])
+		}
+		//new file added need to rebuild all and add to graphs
+		if len(toQuery) == 0 {
+			toQuery = targets
+		}
+		i.watchManyFiles(buildQuery, toQuery, i.buildFileWatcher, &i.bldDirToWatch)
+		fmt.Fprintf(os.Stderr, "Querying for source files...\n")
+		i.watchManyFiles(sourceQuery, toQuery, i.sourceFileWatcher, &i.srcDirToWatch)
+		i.prevDir = ""
+		i.state = RUN
+	case DEBOUNCE_RUN:
+		select {
+		case e := <-i.sourceEventHandler.SourceFileEvents:
+			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
+				i.changeDetected(targets, "source", e.Name)
+			}
+			i.prevDir, _ = filepath.Split(e.Name)
+			i.state = DEBOUNCE_RUN
+		case <-time.After(i.debounceDuration):
+			i.state = RUN
+		}
+	case RUN:
+		var torun []string
+		if i.prevDir != "" && i.firstBuildPassed {
+			torun = i.srcDirToWatch[i.prevDir]
+		} else {
+			torun = targets
+		}
+		fmt.Fprintf(os.Stderr, "%sing %s\n", strings.Title(command), strings.Join(torun, " "))
+		i.beforeCommand(torun, command)
+		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
+		for _, buffer := range outputBuffers {
+			i.afterCommand(torun, command, err == nil, buffer)
+		}
+		i.prevDir = ""
+		i.state = WAIT
+	}
+}
+
 func verb(s string) string {
 	switch s {
 	case "run":
@@ -375,7 +495,27 @@ func contains(l []string, e string) bool {
 	return false
 }
 
-func (i *IBazel) setupRun(target string) command.Command {
+func openFileForLogs(fileToOpen string) *os.File {
+	if !*mrunToFiles {
+		return nil
+	}
+
+	reg, err1 := regexp.Compile("[^a-zA-Z0-9-]+")
+	if err1 != nil {
+		println(err1)
+	}
+	processedString := reg.ReplaceAllString(fileToOpen, "")
+	os.MkdirAll("/tmp/running/", os.ModePerm)
+	filename := fmt.Sprintf("/tmp/running/%s.txt", processedString)
+	file, err2 := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
+	if err2 != nil {
+		println(err2)
+		return nil
+	}
+	return file
+}
+
+func (i *IBazel) setupRun(target string, debugArg []string, argsLength int) command.Command {
 	rule, err := i.queryRule(target)
 	if err != nil {
 		log.Errorf("Error: %v", err)
@@ -404,8 +544,8 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	if i.cmd == nil {
 		// If the command is empty, we are in our first pass through the state
 		// machine and we need to make a command object.
-		i.cmd = i.setupRun(targets[0])
-		outputBuffer, err := i.cmd.Start()
+		i.cmd = i.setupRun(targets[0], []string{}, -1)
+		outputBuffer, err := i.cmd.Start(nil)
 		if err != nil {
 			log.Errorf("Run start failed %v", err)
 		}
@@ -413,8 +553,42 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	}
 
 	log.Logf("Notifying of changes")
-	outputBuffer := i.cmd.NotifyOfChanges()
+	outputBuffer := i.cmd.NotifyOfChanges(nil)
 	return outputBuffer, nil
+}
+
+func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
+	var outputBuffers []*bytes.Buffer
+	fmt.Fprintf(os.Stderr, "Rebuilding changed targets\n")
+	outputBufferBuild, errBuild := i.build(targets...)
+	i.afterCommand(targets, "build", errBuild == nil, outputBufferBuild)
+	if errBuild != nil {
+		return append(outputBuffers, outputBufferBuild), errBuild
+	}
+	i.firstBuildPassed = true
+	if i.cmds == nil {
+		i.cmds = make(map[string]command.Command)
+		i.logFiles = make(map[string]*os.File)
+		// If the commands are empty, we are in our first pass through the state
+		// machine and we need to make command objects.
+		for idx, target := range targets {
+			i.logFiles[target] = openFileForLogs(target)
+			newcommand := i.setupRun(targets[idx], debugArgs[idx], argsLength)
+			i.cmds[target] = newcommand
+			outputBuffer, err := newcommand.Start(i.logFiles[target])
+			outputBuffers = append(outputBuffers, outputBuffer)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Run start failed %v\n", err)
+				return outputBuffers, err
+			}
+		}
+		return outputBuffers, nil
+	}
+	fmt.Fprintf(os.Stderr, "Notifying of changes\n")
+	for _, target := range targets {
+		outputBuffers = append(outputBuffers, i.cmds[target].NotifyOfChanges(i.logFiles[target]))
+	}
+	return outputBuffers, nil
 }
 
 func (i *IBazel) queryRule(rule string) (*blaze_query.Rule, error) {
@@ -423,7 +597,8 @@ func (i *IBazel) queryRule(rule string) (*blaze_query.Rule, error) {
 	res, err := b.CQuery(rule)
 	if err != nil {
 		log.Errorf("Error running Bazel %v", err)
-		osExit(4)
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	for _, target := range res.Results {
@@ -454,13 +629,15 @@ func (i *IBazel) queryForSourceFiles(query string) ([]string, error) {
 	res, err := b.Query(query)
 	if err != nil {
 		log.Errorf("Bazel query failed: %v", err)
-		return []string{}, err
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	workspacePath, err := i.workspaceFinder.FindWorkspace()
 	if err != nil {
 		log.Errorf("Error finding workspace: %v", err)
-		return []string{}, err
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	toWatch := make([]string, 0, 10000)
@@ -495,8 +672,38 @@ func (i *IBazel) watchFiles(query string, watcher fSNotifyWatcher) {
 
 	filesFound := map[string]struct{}{}
 	filesWatched := map[string]struct{}{}
-	uniqueDirectories := map[string]struct{}{}
+	uniqueDirectories := map[string][]string{}
 
+	i.watcherAdd(query, watcher, toWatch, filesFound, filesWatched, uniqueDirectories)
+
+	i.watcherRemove(uniqueDirectories, watcher, filesWatched)
+}
+
+func (i *IBazel) watchManyFiles(query string, targets []string, watcher fSNotifyWatcher, dirStorage *map[string][]string) {
+	toWatchByTarget := map[string][]string{}
+	filesFound := map[string]struct{}{}
+	filesWatched := map[string]struct{}{}
+	uniqueDirectories := map[string][]string{}
+
+	for _, target := range targets {
+		toWatch, err := i.queryForSourceFiles(fmt.Sprintf(query, target))
+		toWatchByTarget[target] = toWatch
+		if err != nil {
+			// If the query fails, just keep watching the same files as before
+			return
+		}
+	}
+
+	dirWatchedByTarget(toWatchByTarget, targets, *dirStorage)
+
+	for _, target := range targets {
+		i.watcherAdd(query, watcher, toWatchByTarget[target], filesFound, filesWatched, uniqueDirectories)
+	}
+
+	i.watcherRemove(*dirStorage, watcher, filesWatched)
+}
+
+func (i *IBazel) watcherAdd(query string, watcher fSNotifyWatcher, toWatch []string, filesFound map[string]struct{}, filesWatched map[string]struct{}, uniqueDirectories map[string][]string) {
 	for _, file := range toWatch {
 		if _, err := os.Stat(file); !os.IsNotExist(err) {
 			filesFound[file] = struct{}{}
@@ -517,19 +724,7 @@ func (i *IBazel) watchFiles(query string, watcher fSNotifyWatcher) {
 				continue
 			} else {
 				filesWatched[file] = struct{}{}
-				uniqueDirectories[parentDirectory] = struct{}{}
-			}
-		}
-	}
-
-	for file, _ := range i.filesWatched[watcher] {
-		parentDirectory, _ := filepath.Split(file)
-
-		// Remove the watch from the parent directory if it no longer contains any files returned by the latest query
-		if _, ok := uniqueDirectories[parentDirectory]; !ok {
-			err := watcher.Remove(parentDirectory)
-			if err != nil {
-				log.Errorf("Error unwatching file %q error: %v\n", file, err)
+				uniqueDirectories[parentDirectory] = []string{}
 			}
 		}
 	}
@@ -537,6 +732,62 @@ func (i *IBazel) watchFiles(query string, watcher fSNotifyWatcher) {
 	if len(filesFound) == 0 {
 		log.Errorf("Didn't find any files to watch from query %s", query)
 	}
+}
+
+func (i *IBazel) watcherRemove(dirWatched map[string][]string, watcher fSNotifyWatcher, filesWatched map[string]struct{}) {
+	for file, _ := range i.filesWatched[watcher] {
+		parentDirectory, _ := filepath.Split(file)
+
+		// Remove the watch from the parent directory if it no longer contains any files returned by the latest query
+		if _, ok := dirWatched[parentDirectory]; !ok {
+			err := watcher.Remove(parentDirectory)
+			if err != nil {
+				log.Errorf("Error unwatching file %q error: %v\n", file, err)
+			}
+		}
+	}
 
 	i.filesWatched[watcher] = filesWatched
+}
+
+func dirWatchedByTarget(toWatchByTarget map[string][]string, targets []string, dirStorage map[string][]string) {
+	for dir, _ := range dirStorage {
+		for _, target := range targets {
+			if idx := containsIdx(dirStorage[dir], target); idx != -1 {
+				dirStorage[dir] = deleteIdx(dirStorage[dir], idx)
+			}
+			if len(dirStorage[dir]) == 0 {
+				delete(dirStorage, dir)
+			}
+			
+		}
+	}
+
+	for _, target := range targets {
+		for _, file := range toWatchByTarget[target] {
+			parentDirectory, _ := filepath.Split(file)
+			if idx := containsIdx(dirStorage[parentDirectory], target); idx == -1 {
+				dirStorage[parentDirectory] = append(dirStorage[parentDirectory], target)
+			}
+		}
+	}
+}
+
+// Find string e in string array l
+// Return the index if found, -1 if not found
+func containsIdx(l []string, e string) int {
+	for idx, i := range l {
+		if i == e {
+			return idx
+		}
+	}
+	return -1
+}
+
+// Delete idx element in string array a
+func deleteIdx(a []string, idx int) []string {
+	a[idx] = a[len(a)-1] // Copy last element to index i.
+	a[len(a)-1] = ""   // Erase last element (write zero value).
+	a = a[:len(a)-1]
+	return a
 }
