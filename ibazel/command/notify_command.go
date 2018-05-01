@@ -57,7 +57,7 @@ func (c *notifyCommand) Terminate() {
 	c.cmd = nil
 }
 
-func (c *notifyCommand) Start() (*bytes.Buffer, error) {
+func (c *notifyCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	b := bazelNew()
 	b.SetArguments(c.bazelArgs)
 
@@ -65,7 +65,7 @@ func (c *notifyCommand) Start() (*bytes.Buffer, error) {
 	b.WriteToStdout(true)
 
 	var outputBuffer *bytes.Buffer
-	outputBuffer, c.cmd = start(b, c.target, c.args)
+	outputBuffer, c.cmd = start(b, c.target, c.args, logFile)
 	// Keep the writer around.
 	var err error
 	c.stdin, err = c.cmd.StdinPipe()
@@ -84,7 +84,7 @@ func (c *notifyCommand) Start() (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
-func (c *notifyCommand) NotifyOfChanges() *bytes.Buffer {
+func (c *notifyCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 	b := bazelNew()
 	b.SetArguments(c.bazelArgs)
 
