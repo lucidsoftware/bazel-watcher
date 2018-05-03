@@ -91,7 +91,7 @@ func New() (*IBazel, error) {
 	i.workspaceFinder = &workspace_finder.MainWorkspaceFinder{}
 
 	i.sigs = make(chan os.Signal, 1)
-	signal.Notify(i.sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(i.sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	liveReload := live_reload.New()
 	profiler := profiler.New(Version)
@@ -120,7 +120,7 @@ func New() (*IBazel, error) {
 }
 
 func (i *IBazel) handleSignals() {
-	// Got an OS signal (SIGINT, SIGTERM).
+	// Got an OS signal (SIGINT, SIGTERM, SIGHUP).
 	sig := <-i.sigs
 
 	switch sig {
@@ -135,6 +135,13 @@ func (i *IBazel) handleSignals() {
 	case syscall.SIGTERM:
 		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			fmt.Fprintf(os.Stderr, "\nSubprocess killed from getting SIGTERM\n")
+			i.cmd.Terminate()
+		}
+		osExit(3)
+		return
+	case syscall.SIGHUP:
+		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
+			fmt.Fprintf(os.Stderr, "\nSubprocess killed from getting SIGHUP\n")
 			i.cmd.Terminate()
 		}
 		osExit(3)
