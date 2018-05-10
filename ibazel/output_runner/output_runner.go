@@ -35,7 +35,7 @@ var runOutputInteractive = flag.Bool(
 	true,
 	"Use an interactive prompt when executing commands in Bazel output")
 
-type OutputRunner struct {}
+type OutputRunner struct{}
 
 func New() *OutputRunner {
 	i := &OutputRunner{}
@@ -51,7 +51,7 @@ func (i *OutputRunner) ChangeDetected(targets []string, changeType string, chang
 func (i *OutputRunner) BeforeCommand(targets []string, command string) {}
 
 func (i *OutputRunner) AfterCommand(targets []string, command string, success bool, output *bytes.Buffer) {
-	if !*runOutput {
+	if !*runOutput || output == nil {
 		return
 	}
 
@@ -88,7 +88,7 @@ func promptCommand(command string) bool {
 
 func executeCommand(command string, args []string) {
 	for i, arg := range args {
-	    args[i] = strings.TrimSpace(arg)
+		args[i] = strings.TrimSpace(arg)
 	}
 	fmt.Fprintf(os.Stderr, "Executing command: %s\n", command)
 	workspaceFinder := &workspace_finder.MainWorkspaceFinder{}
