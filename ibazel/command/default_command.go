@@ -78,8 +78,8 @@ func (c *defaultCommand) Start() (*bytes.Buffer, error) {
 
 func (c *defaultCommand) NotifyOfChanges() *bytes.Buffer {
 	c.Terminate()
-	c.Start()
-	return nil
+	outputBuffer, _ := c.Start()
+	return outputBuffer
 }
 
 func (c *defaultCommand) IsSubprocessRunning() bool {
