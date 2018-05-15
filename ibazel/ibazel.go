@@ -546,7 +546,8 @@ func (i *IBazel) queryRule(rule string) (*blaze_query.Rule, error) {
 	res, err := b.Query(rule)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running Bazel %v\n", err)
-		osExit(4)
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	for _, target := range res.Target {
@@ -577,13 +578,15 @@ func (i *IBazel) queryForSourceFiles(query string) []string {
 	res, err := b.Query(query)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running Bazel %v\n", err)
-		osExit(4)
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	workspacePath, err := i.workspaceFinder.FindWorkspace()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error finding workspace: %v\n", err)
-		osExit(5)
+		i.sigs <- syscall.SIGTERM
+		time.Sleep(10 * time.Second)
 	}
 
 	toWatch := make([]string, 0, 10000)
