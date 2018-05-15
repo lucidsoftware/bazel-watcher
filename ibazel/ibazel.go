@@ -511,6 +511,12 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
 
 	var outputBuffers []*bytes.Buffer
+	fmt.Fprintf(os.Stderr, "Rebuilding changed targets")
+	outputBufferBuild, errBuild := i.build(targets...)
+	i.afterCommand(targets, "build", errBuild == nil, outputBufferBuild)
+	if errBuild != nil {
+		return append(outputBuffers, outputBufferBuild), errBuild
+	}
 	if i.cmds == nil {
 		i.cmds = make(map[string]command.Command)
 		// If the commands are empty, we are in our first pass through the state
