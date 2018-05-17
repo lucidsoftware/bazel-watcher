@@ -17,10 +17,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -40,6 +42,7 @@ var osExit = os.Exit
 var bazelNew = bazel.New
 var commandDefaultCommand = command.DefaultCommand
 var commandNotifyCommand = command.NotifyCommand
+var mrunToFiles = flag.Bool("mrunToFiles", false, "Log mrun to file for simpler log reading")
 
 type State string
 type runnableCommand func(...string) (*bytes.Buffer, error)
@@ -62,6 +65,7 @@ type IBazel struct {
 
 	cmd              command.Command
 	cmds             map[string]command.Command
+	logFiles         map[string]*os.File
 	fileToProcesses  map[string][]string
 	bldfToProcesses  map[string][]string
 	prev             string
@@ -467,6 +471,26 @@ func contains(l []string, e string) bool {
 	return false
 }
 
+func openFileForLogs(fileToOpen string) *os.File {
+	if !*mrunToFiles {
+		return nil
+	}
+
+	reg, err1 := regexp.Compile("[^a-zA-Z0-9-]+")
+	if err1 != nil {
+		println(err1)
+	}
+	processedString := reg.ReplaceAllString(fileToOpen, "")
+	os.MkdirAll("/tmp/running/", os.ModePerm)
+	filename := fmt.Sprintf("/tmp/running/%s.txt", processedString)
+	file, err2 := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
+	if err2 != nil {
+		println(err2)
+		return nil
+	}
+	return file
+}
+
 func (i *IBazel) setupRun(target string) command.Command {
 	rule, err := i.queryRule(target)
 	if err != nil {
@@ -497,7 +521,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 		// If the command is empty, we are in our first pass through the state
 		// machine and we need to make a command object.
 		i.cmd = i.setupRun(targets[0])
-		outputBuffer, err := i.cmd.Start()
+		outputBuffer, err := i.cmd.Start(nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Run start failed %v\n", err)
 		}
@@ -505,7 +529,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	}
 
 	fmt.Fprintf(os.Stderr, "Notifying of changes\n")
-	outputBuffer := i.cmd.NotifyOfChanges()
+	outputBuffer := i.cmd.NotifyOfChanges(nil)
 	return outputBuffer, nil
 }
 
@@ -521,12 +545,15 @@ func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
 	i.firstBuildPassed = true
 	if i.cmds == nil {
 		i.cmds = make(map[string]command.Command)
+		i.logFiles = make(map[string]*os.File)
 		// If the commands are empty, we are in our first pass through the state
 		// machine and we need to make command objects.
 		for _, targeter := range targets {
+			i.logFiles[targeter] = openFileForLogs(targeter)
+
 			newcommand := i.setupRun(targeter)
 			i.cmds[targeter] = newcommand
-			outputBuffer, err := newcommand.Start()
+			outputBuffer, err := newcommand.Start(i.logFiles[targeter])
 			outputBuffers = append(outputBuffers, outputBuffer)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Run start failed %v\n", err)
@@ -537,7 +564,7 @@ func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
 	}
 	fmt.Fprintf(os.Stderr, "Notifying of changes\n")
 	for _, targeter := range targets {
-		outputBuffers = append(outputBuffers, i.cmds[targeter].NotifyOfChanges())
+		outputBuffers = append(outputBuffers, i.cmds[targeter].NotifyOfChanges(i.logFiles[targeter]))
 	}
 	return outputBuffers, nil
 }
