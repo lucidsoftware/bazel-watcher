@@ -60,13 +60,14 @@ const buildQuery = "buildfiles(deps(set(%s)))"
 type IBazel struct {
 	debounceDuration time.Duration
 
-	cmd             command.Command
-	cmds            map[string]command.Command
-	fileToProcesses map[string][]string
-	bldfToProcesses map[string][]string
-	prev            string
-	args            []string
-	bazelArgs       []string
+	cmd              command.Command
+	cmds             map[string]command.Command
+	fileToProcesses  map[string][]string
+	bldfToProcesses  map[string][]string
+	prev             string
+	firstBuildPassed bool
+	args             []string
+	bazelArgs        []string
 
 	sigs           chan os.Signal // Signals channel for the current process
 	interruptCount int
@@ -90,7 +91,7 @@ func New() (*IBazel, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	i.firstBuildPassed = false
 	i.debounceDuration = 100 * time.Millisecond
 	i.filesWatched = map[*fsnotify.Watcher]map[string]bool{}
 	i.workspaceFinder = &workspace_finder.MainWorkspaceFinder{}
@@ -413,7 +414,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 	case RUN:
 		var torun []string
-		if i.prev != "" {
+		if i.prev != "" && i.firstBuildPassed {
 			torun = i.fileToProcesses[i.prev]
 		} else {
 			torun = targets
@@ -517,6 +518,7 @@ func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
 	if errBuild != nil {
 		return append(outputBuffers, outputBufferBuild), errBuild
 	}
+	i.firstBuildPassed = true
 	if i.cmds == nil {
 		i.cmds = make(map[string]command.Command)
 		// If the commands are empty, we are in our first pass through the state
