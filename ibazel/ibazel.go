@@ -46,7 +46,7 @@ var mrunToFiles = flag.Bool("mrunToFiles", false, "Log mrun to file for simpler 
 
 type State string
 type runnableCommand func(...string) (*bytes.Buffer, error)
-type runnableCommands func(...string) ([]*bytes.Buffer, error)
+type runnableCommands func([]string, [][]string, int) ([]*bytes.Buffer, error)
 
 const (
 	DEBOUNCE_QUERY State = "DEBOUNCE_QUERY"
@@ -267,9 +267,10 @@ func (i *IBazel) Run(target string, args []string) error {
 }
 
 // Run the specified target (singular) in the IBazel loop.
-func (i *IBazel) RunMulitple(args []string, target ...string) error {
+func (i *IBazel) RunMulitple(args, target []string, debugArgs [][]string) error {
 	i.args = args
-	return i.loopMultiple("run", i.runMulitple, target)
+	argsLength := len(args)
+	return i.loopMultiple("run", i.runMulitple, target, debugArgs, argsLength)
 }
 
 // Build the specified targets in the IBazel loop.
@@ -293,10 +294,10 @@ func (i *IBazel) loop(command string, commandToRun runnableCommand, targets []st
 	return nil
 }
 
-func (i *IBazel) loopMultiple(command string, commandToRun runnableCommands, targets []string) error {
+func (i *IBazel) loopMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) error {
 	i.state = QUERY
 	for {
-		i.iterationMultiple(command, commandToRun, targets)
+		i.iterationMultiple(command, commandToRun, targets, debugArgs, argsLength)
 	}
 
 	return nil
@@ -360,7 +361,7 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 	}
 }
 
-func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string) {
+func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
 	fmt.Fprintf(os.Stderr, "State: %s\n", i.state)
 	switch i.state {
 	case WAIT:
@@ -425,7 +426,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 		fmt.Fprintf(os.Stderr, "%sing %s\n", strings.Title(command), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
-		outputBuffers, err := commandToRun(torun...)
+		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
@@ -491,7 +492,7 @@ func openFileForLogs(fileToOpen string) *os.File {
 	return file
 }
 
-func (i *IBazel) setupRun(target string) command.Command {
+func (i *IBazel) setupRun(target string, debugArg []string, argsLength int) command.Command {
 	rule, err := i.queryRule(target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -512,6 +513,13 @@ func (i *IBazel) setupRun(target string) command.Command {
 		fmt.Fprintf(os.Stderr, "Launching with notifications\n")
 		return commandNotifyCommand(i.bazelArgs, target, i.args)
 	} else {
+		// argsLength == -1 when the command is `run`
+		// no need to modify i.args
+		if len(debugArg) > 0 {
+			i.args = append(debugArg, i.args[len(i.args)-argsLength:len(i.args)]...)
+		} else if argsLength > -1 {
+			i.args = i.args[len(debugArg)-argsLength:len(i.args)]
+		}
 		return commandDefaultCommand(i.bazelArgs, target, i.args)
 	}
 }
@@ -520,7 +528,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	if i.cmd == nil {
 		// If the command is empty, we are in our first pass through the state
 		// machine and we need to make a command object.
-		i.cmd = i.setupRun(targets[0])
+		i.cmd = i.setupRun(targets[0], []string{}, -1)
 		outputBuffer, err := i.cmd.Start(nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Run start failed %v\n", err)
@@ -533,10 +541,10 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
-func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
+func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
 
 	var outputBuffers []*bytes.Buffer
-	fmt.Fprintf(os.Stderr, "Rebuilding changed targets")
+	fmt.Fprintf(os.Stderr, "Rebuilding changed targets\n")
 	outputBufferBuild, errBuild := i.build(targets...)
 	i.afterCommand(targets, "build", errBuild == nil, outputBufferBuild)
 	if errBuild != nil {
@@ -548,10 +556,9 @@ func (i *IBazel) runMulitple(targets ...string) ([]*bytes.Buffer, error) {
 		i.logFiles = make(map[string]*os.File)
 		// If the commands are empty, we are in our first pass through the state
 		// machine and we need to make command objects.
-		for _, targeter := range targets {
+		for idx, targeter := range targets {
 			i.logFiles[targeter] = openFileForLogs(targeter)
-
-			newcommand := i.setupRun(targeter)
+			newcommand := i.setupRun(targets[idx], debugArgs[idx], argsLength)
 			i.cmds[targeter] = newcommand
 			outputBuffer, err := newcommand.Start(i.logFiles[targeter])
 			outputBuffers = append(outputBuffers, outputBuffer)
