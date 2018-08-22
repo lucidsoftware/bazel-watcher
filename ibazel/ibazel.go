@@ -82,6 +82,7 @@ type IBazel struct {
 	sourceFileWatcher *fsnotify.Watcher
 
 	filesWatched map[*fsnotify.Watcher]map[string]bool // Inner map is a surrogate for a set
+	multiFilesWatched map[*fsnotify.Watcher]map[string]map[string]bool // Inner map is a surrogate for a set
 
 	sourceEventHandler *SourceEventHandler
 	lifecycleListeners []Lifecycle
@@ -98,7 +99,11 @@ func New() (*IBazel, error) {
 	i.firstBuildPassed = false
 	i.debounceDuration = 100 * time.Millisecond
 	i.filesWatched = map[*fsnotify.Watcher]map[string]bool{}
+	i.multiFilesWatched = map[*fsnotify.Watcher]map[string]map[string]bool{}
 	i.workspaceFinder = &workspace_finder.MainWorkspaceFinder{}
+
+	i.fileToProcesses = map[string][]string{}
+	i.bldfToProcesses = map[string][]string{}
 
 	i.sigs = make(chan os.Signal, 1)
 	signal.Notify(i.sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -393,7 +398,8 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		fmt.Fprintf(os.Stderr, "Querying for BUILD files...\n")
 		var toQuery []string
 		if i.prev != "" {
-			toQuery = i.bldfToProcesses[i.prev]
+			toQuery := make([]string, len(i.bldfToProcesses[i.prev]))
+			copy(toQuery, i.bldfToProcesses[i.prev])
 		}
 		//new file added need to rebuild all and add to graphs
 		if len(toQuery) == 0 {
@@ -673,41 +679,74 @@ func (i *IBazel) watchFiles(query string, watcher *fsnotify.Watcher) {
 	i.filesWatched[watcher] = filesAdded
 }
 
+func containsIdx(l []string, e string) int {
+	for idx, i := range l {
+		if i == e {
+			return idx
+		}
+	}
+	return -1
+}
+ func deleteIdx(a []string, idx int) []string {
+	a[idx] = a[len(a)-1] // Copy last element to index i.
+	a[len(a)-1] = ""   // Erase last element (write zero value).
+	a = a[:len(a)-1]
+	return a
+}
+
 func (i *IBazel) watchManyFiles(query string, targets []string, watcher *fsnotify.Watcher, filestorage *map[string][]string) {
 	var watchArray = make(map[string][]string)
 	for _, target := range targets {
 		watchArray[target] = i.queryForSourceFiles(fmt.Sprintf(query, target))
 	}
-	*filestorage = make(map[string][]string)
+	for file, _ := range *filestorage {
+		for _, target := range targets {
+			idx := containsIdx((*filestorage)[file], target)
+			if idx != -1 {
+				(*filestorage)[file] = deleteIdx((*filestorage)[file], idx)
+			}
+			if len((*filestorage)[file]) == 0 {
+				delete((*filestorage), file)
+			}
+			
+		}
+	}
 	for _, target := range targets {
 		for _, sourcefile := range watchArray[target] {
 			(*filestorage)[sourcefile] = append((*filestorage)[sourcefile], target)
 		}
 	}
-	toWatch := i.queryForSourceFiles(fmt.Sprintf(query, strings.Join(targets, " ")))
-	filesAdded := map[string]bool{}
-	for _, line := range toWatch {
-		err := watcher.Add(line)
-		if err != nil {
-			// Special case for the "defaults package", see https://github.com/bazelbuild/bazel/issues/5533
-			if !strings.HasSuffix(filepath.ToSlash(line), "/tools/defaults/BUILD") {
-				fmt.Fprintf(os.Stderr, "Error watching file %v\nError: %v\n", line, err)
-			}
-			continue
-		} else {
-			filesAdded[line] = true
-		}
-	}
-
-	for line, _ := range i.filesWatched[watcher] {
-		_, ok := filesAdded[line]
-		if !ok {
-			err := watcher.Remove(line)
+	filesAdded := map[string]map[string]bool{}
+	for _, target := range targets {
+		filesAdded[target] = map[string]bool{}
+		for _, line := range watchArray[target] {
+			err := watcher.Add(line)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error unwatching file %v\nError: %v\n", line, err)
+				// Special case for the "defaults package", see https://github.com/bazelbuild/bazel/issues/5533
+				if !strings.HasSuffix(filepath.ToSlash(line), "/tools/defaults/BUILD") {
+					fmt.Fprintf(os.Stderr, "Error watching file %v\nError: %v\n", line, err)
+				}
+				continue
+			} else {
+				filesAdded[target][line] = true
 			}
 		}
 	}
-
-	i.filesWatched[watcher] = filesAdded
+	for _, target := range targets {
+		for line, _ := range i.multiFilesWatched[watcher][target] {
+			if _, ok := (*filestorage)[line]; !ok {
+				err := watcher.Remove(line)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error unwatching file %v\nError: %v\n", line, err)
+				}
+			}
+		}
+	}
+	if _, ok := i.multiFilesWatched[watcher]; !ok {
+		i.multiFilesWatched[watcher] = filesAdded
+	} else {
+		for _, target := range targets {
+			i.multiFilesWatched[watcher][target] = filesAdded[target]
+		}
+	}
 }
