@@ -536,6 +536,13 @@ func (i *IBazel) setupRun(target string, debugArg []string, argsLength int) comm
 		log.Logf("Launching with notifications")
 		return commandNotifyCommand(i.startupArgs, i.bazelArgs, target, i.args)
 	} else {
+		// argsLength == -1 when the command is `run`
+		// no need to modify i.args
+		if len(debugArg) > 0 {
+			i.args = append(debugArg, i.args[len(i.args)-argsLength:len(i.args)]...)
+		} else if argsLength > -1 {
+			i.args = i.args[len(i.args)-argsLength:len(i.args)]
+		}
 		return commandDefaultCommand(i.startupArgs, i.bazelArgs, target, i.args)
 	}
 }
