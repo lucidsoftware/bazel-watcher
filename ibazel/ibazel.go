@@ -375,19 +375,19 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 }
 
 func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
-	fmt.Fprintf(os.Stderr, "State: %s\n", i.state)
+	log.Logf("State: %s", i.state)
 	switch i.state {
 	case WAIT:
 		select {
 		case e := <-i.sourceEventHandler.SourceFileEvents:
 			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
-				fmt.Fprintf(os.Stderr, "\nChanged: %q. Rebuilding...\n", e.Name)
+				log.Logf("\nChanged: %q. Rebuilding...", e.Name)
 				i.changeDetected(targets, "source", e.Name)
 				i.state = DEBOUNCE_RUN
 			}
 		case e := <-i.buildFileWatcher.Events():
 			if _, ok := i.filesWatched[i.buildFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
-				fmt.Fprintf(os.Stderr, "\nBuild graph changed: %q. Requerying...\n", e.Name)
+				log.Logf("\nBuild graph changed: %q. Requerying...", e.Name)
 				i.changeDetected(targets, "graph", e.Name)
 				i.state = DEBOUNCE_QUERY
 			}
@@ -405,7 +405,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 	case QUERY:
 		// Query for which files to watch.
-		fmt.Fprintf(os.Stderr, "Querying for BUILD files...\n")
+		log.Logf("Querying for BUILD files...")
 		var toQuery []string
 		if i.prevDir != "" {
 			toQuery := make([]string, len(i.bldDirToWatch[i.prevDir]))
@@ -416,7 +416,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			toQuery = targets
 		}
 		i.watchManyFiles(buildQuery, toQuery, i.buildFileWatcher, &i.bldDirToWatch)
-		fmt.Fprintf(os.Stderr, "Querying for source files...\n")
+		log.Logf("Querying for source files...")
 		i.watchManyFiles(sourceQuery, toQuery, i.sourceFileWatcher, &i.srcDirToWatch)
 		i.prevDir = ""
 		i.state = RUN
@@ -438,7 +438,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		} else {
 			torun = targets
 		}
-		fmt.Fprintf(os.Stderr, "%sing %s\n", strings.Title(command), strings.Join(torun, " "))
+		log.Logf("%sing %s", strings.Title(command), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
@@ -566,7 +566,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 
 func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
 	var outputBuffers []*bytes.Buffer
-	fmt.Fprintf(os.Stderr, "Rebuilding changed targets\n")
+	log.Logf("Rebuilding changed targets")
 	outputBufferBuild, errBuild := i.build(targets...)
 	i.afterCommand(targets, "build", errBuild == nil, outputBufferBuild)
 	if errBuild != nil {
@@ -585,13 +585,13 @@ func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength 
 			outputBuffer, err := newcommand.Start(i.logFiles[target])
 			outputBuffers = append(outputBuffers, outputBuffer)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Run start failed %v\n", err)
+				log.Logf("Run start failed %v", err)
 				return outputBuffers, err
 			}
 		}
 		return outputBuffers, nil
 	}
-	fmt.Fprintf(os.Stderr, "Notifying of changes\n")
+	log.Logf("Notifying of changes")
 	for _, target := range targets {
 		outputBuffers = append(outputBuffers, i.cmds[target].NotifyOfChanges(i.logFiles[target]))
 	}
