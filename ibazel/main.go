@@ -191,7 +191,9 @@ func main() {
 func handle(i *IBazel, command string, args []string) {
 	targets, startupArgs, bazelArgs, args, debugArgs := parseArgs(args)
 	i.SetStartupArgs(startupArgs)
+	fmt.Println("TEST: new startupArgs:", startupArgs,"new targets:",targets)
 	i.SetBazelArgs(bazelArgs)
+	fmt.Println("TEST: new bazelArgs:", bazelArgs,"new targets:",targets)
 
 	switch command {
 	case "build":
