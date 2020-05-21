@@ -200,10 +200,12 @@ func handle(i *IBazel, command string, args []string) {
 		// Run only takes one argument
 		i.Run(targets[0], args)
 	case "mrun":
+		print("\nTEST: We are running 'mrun'")
 		i.RunMulitple(args, targets, debugArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "Asked me to perform %s. I don't know how to do that.", command)
 		usage()
 		return
 	}
+	print("\nTEST:  Handle is about to finish")
 }
