@@ -110,7 +110,8 @@ func isOverrideableBazelFlag(arg string) bool {
 }
 
 func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, debugArgs [][]string) {
-	print("\nParse args. Targets: "+str(targets)+" startupArgs: "+str(startupArgs)+" bazelArgs: "+str(bazelArgs)+" args: "+str(args)+" debugArgs: "+str(debugArgs0)+"\n")
+	print("\nParse args.")
+	print("Targets: "+str(targets)+" startupArgs: "+str(startupArgs)+" bazelArgs: "+str(bazelArgs)+" args: "+str(args)+" debugArgs: "+str(debugArgs0)+"\n")
 	afterDoubleDash := false
 	for _, arg := range in {
 		if afterDoubleDash {
