@@ -312,6 +312,7 @@ func (i *IBazel) loop(command string, commandToRun runnableCommand, targets []st
 func (i *IBazel) loopMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) error {
 	i.state = QUERY
 	for {
+		fmt.Println("/n--- Starting a new iteration\n")
 		i.iterationMultiple(command, commandToRun, targets, debugArgs, argsLength)
 	}
 
@@ -405,6 +406,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 	case QUERY:
 		// Query for which files to watch.
+		log.Logf("Today is a good day")
 		log.Logf("Querying for BUILD files...")
 		var toQuery []string
 		if i.prevDir != "" {
