@@ -149,7 +149,7 @@ func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, deb
 func main() {
 	flag.Usage = usage
 	flag.Parse()
-
+	print("Main is running now")
 	if *logToFile != "-" {
 		var err error
 		logFile, err := os.OpenFile(*logToFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -181,8 +181,9 @@ func main() {
 	if err != nil {
 		log.Errorf("error setting higher file descriptor limit for this process: %v", err)
 	}
-
+	print("Time to handle commands")
 	handle(i, command, args)
+	print("Apparently we completely finished handling commands")
 }
 
 func handle(i *IBazel, command string, args []string) {
