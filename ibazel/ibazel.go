@@ -312,7 +312,7 @@ func (i *IBazel) loop(command string, commandToRun runnableCommand, targets []st
 func (i *IBazel) loopMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) error {
 	i.state = QUERY
 	for {
-		fmt.Println("/n--- Starting a new iteration\n")
+		fmt.Println("\n--- Starting a new iteration\n")
 		i.iterationMultiple(command, commandToRun, targets, debugArgs, argsLength)
 	}
 
@@ -697,6 +697,7 @@ func (i *IBazel) watchManyFiles(query string, targets []string, watcher fSNotify
 	for _, target := range targets {
 		toWatch, err := i.queryForSourceFiles(fmt.Sprintf(query, target))
 		toWatchByTarget[target] = toWatch
+		fmt.Println("TEST: target",target,"toWatch",toWatch)
 		if err != nil {
 			// If the query fails, just keep watching the same files as before
 			return
