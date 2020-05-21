@@ -144,6 +144,8 @@ func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, deb
 			}
 		}
 	}
+	fmt.Println("\nTEST: Parse args FINISH.")
+	fmt.Println("Targets:", targets, "startupArgs:", startupArgs, "bazelArgs:", bazelArgs,"args:",args,"debugArgs:",debugArgs,"\n")
 	return
 }
 
