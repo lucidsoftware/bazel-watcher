@@ -110,8 +110,8 @@ func isOverrideableBazelFlag(arg string) bool {
 }
 
 func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, debugArgs [][]string) {
-	print("\nParse args.")
-	print("Targets: "+str(targets)+" startupArgs: "+str(startupArgs)+" bazelArgs: "+str(bazelArgs)+" args: "+str(args)+" debugArgs: "+str(debugArgs0)+"\n")
+	fmt.Println("\nTEST: Parse args.")
+	fmt.Println("Targets:", targets, "startupArgs:", startupArgs, "bazelArgs:", bazelArgs,"args:",args,"debugArgs:",debugArgs,"\n")
 	afterDoubleDash := false
 	for _, arg := range in {
 		if afterDoubleDash {
@@ -151,7 +151,7 @@ func parseArgs(in []string) (targets, startupArgs, bazelArgs, args []string, deb
 func main() {
 	flag.Usage = usage
 	flag.Parse()
-	print("Main is running now")
+	fmt.Println("\nTEST: Main is running now")
 	if *logToFile != "-" {
 		var err error
 		logFile, err := os.OpenFile(*logToFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -183,9 +183,9 @@ func main() {
 	if err != nil {
 		log.Errorf("error setting higher file descriptor limit for this process: %v", err)
 	}
-	print("Time to handle commands")
+	fmt.Println("TEST: Time to handle commands")
 	handle(i, command, args)
-	print("Apparently we completely finished handling commands")
+	fmt.Println("TEST: Apparently we completely finished handling commands")
 }
 
 func handle(i *IBazel, command string, args []string) {
@@ -202,14 +202,13 @@ func handle(i *IBazel, command string, args []string) {
 		// Run only takes one argument
 		i.Run(targets[0], args)
 	case "mrun":
-		print("\nTEST: We are running 'mrun'")
-		print(args, targets, debugArgs)
-		print('\n')
+		fmt.Println("\nTEST: We are running 'mrun'")
+		fmt.Println(args, targets, debugArgs)
 		i.RunMulitple(args, targets, debugArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "Asked me to perform %s. I don't know how to do that.", command)
 		usage()
 		return
 	}
-	print("\nTEST:  Handle is about to finish")
+	fmt.Println("\nTEST:  Handle is about to finish")
 }
