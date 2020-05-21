@@ -693,11 +693,10 @@ func (i *IBazel) watchManyFiles(query string, targets []string, watcher fSNotify
 	filesFound := map[string]struct{}{}
 	filesWatched := map[string]struct{}{}
 	uniqueDirectories := map[string][]string{}
-
+	
 	for _, target := range targets {
 		toWatch, err := i.queryForSourceFiles(fmt.Sprintf(query, target))
 		toWatchByTarget[target] = toWatch
-		fmt.Println("TEST: target",target,"toWatch",toWatch)
 		if err != nil {
 			// If the query fails, just keep watching the same files as before
 			return
