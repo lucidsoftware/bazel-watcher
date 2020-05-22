@@ -377,6 +377,8 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 
 func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
 	log.Logf("State: %s", i.state)
+	log.Logf("Sleeping 1.5 second")
+	time.Sleep(1500*time.Millisecond)
 	switch i.state {
 	case WAIT:
 		select {
@@ -442,11 +444,17 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		fmt.Println("TEST: beforeCommand", torun, command)
+		log.Logf("Sleeping 1.5 second")
+		time.Sleep(1500*time.Millisecond)
 		i.beforeCommand(torun, command)
 		fmt.Println("TEST: commandToRun", torun, debugArgs, argsLength)
+		log.Logf("Sleeping 1.5 second")
+		time.Sleep(1500*time.Millisecond)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
 			fmt.Println("TEST: afterCommand", torun, command, err==nil, buffer)
+			log.Logf("Sleeping 1.5 second")
+			time.Sleep(1500*time.Millisecond)
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
 		i.prevDir = ""
