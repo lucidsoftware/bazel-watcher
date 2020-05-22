@@ -441,8 +441,8 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			torun = targets
 		}
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
-		//log.Logf("%sing %s", strings.Title(command), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
+		fmt.Println("TEST:", torun, debugArgs, argsLength)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
 			i.afterCommand(torun, command, err == nil, buffer)
