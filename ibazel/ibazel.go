@@ -440,7 +440,8 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		} else {
 			torun = targets
 		}
-		log.Logf("%sing %s", strings.Title(command), strings.Join(torun, " "))
+		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
+		//log.Logf("%sing %s", strings.Title(command), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
@@ -455,6 +456,8 @@ func verb(s string) string {
 	switch s {
 	case "run":
 		return "running"
+	case "Run":
+		return "Running"
 	default:
 		return fmt.Sprintf("%sing", s)
 	}
