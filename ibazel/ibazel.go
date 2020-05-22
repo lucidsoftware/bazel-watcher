@@ -377,8 +377,8 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 
 func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
 	log.Logf("State: %s", i.state)
-	log.Logf("Sleeping 1.5 second")
-	time.Sleep(1500*time.Millisecond)
+	log.Logf("Sleeping 2.5 second")
+	time.Sleep(2500*time.Millisecond)
 	switch i.state {
 	case WAIT:
 		select {
@@ -444,17 +444,17 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		fmt.Println("TEST: beforeCommand", torun, command)
-		log.Logf("Sleeping 1.5 second")
-		time.Sleep(1500*time.Millisecond)
+		log.Logf("Sleeping 2.5 second")
+		time.Sleep(2500*time.Millisecond)
 		i.beforeCommand(torun, command)
 		fmt.Println("TEST: commandToRun", torun, debugArgs, argsLength)
-		log.Logf("Sleeping 1.5 second")
-		time.Sleep(1500*time.Millisecond)
+		log.Logf("Sleeping 2.5 second")
+		time.Sleep(2500*time.Millisecond)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
 			fmt.Println("TEST: afterCommand", torun, command, err==nil, buffer)
-			log.Logf("Sleeping 1.5 second")
-			time.Sleep(1500*time.Millisecond)
+			log.Logf("Sleeping 2.5 second")
+			time.Sleep(2500*time.Millisecond)
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
 		i.prevDir = ""
@@ -582,6 +582,8 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
 	var outputBuffers []*bytes.Buffer
 	log.Logf("Rebuilding changed targets")
+	log.Logf("Sleeping 2.5 seconds")
+	time.Sleep(2500*time.Millisecond)
 	outputBufferBuild, errBuild := i.build(targets...)
 	i.afterCommand(targets, "build", errBuild == nil, outputBufferBuild)
 	if errBuild != nil {
@@ -607,9 +609,13 @@ func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength 
 		return outputBuffers, nil
 	}
 	log.Logf("Notifying of changes")
+	log.Logf("Sleeping 2.5 seconds")
+	time.Sleep(2500*time.Millisecond)
 	for _, target := range targets {
 		outputBuffers = append(outputBuffers, i.cmds[target].NotifyOfChanges(i.logFiles[target]))
 	}
+	log.Logf("Sleeping 2.5 seconds right before return outputBuffers, nil")
+	time.Sleep(2500*time.Millisecond)
 	return outputBuffers, nil
 }
 
