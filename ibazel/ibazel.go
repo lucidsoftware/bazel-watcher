@@ -441,10 +441,12 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			torun = targets
 		}
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
+		fmt.Println("TEST: beforeCommand", torun, command)
 		i.beforeCommand(torun, command)
-		fmt.Println("TEST:", torun, debugArgs, argsLength)
+		fmt.Println("TEST: commandToRun", torun, debugArgs, argsLength)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		for _, buffer := range outputBuffers {
+			fmt.Println("TEST: afterCommand", torun, command, err==nil, buffer)
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
 		i.prevDir = ""
