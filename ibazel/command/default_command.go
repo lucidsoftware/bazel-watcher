@@ -84,7 +84,7 @@ func (c *defaultCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 func (c *defaultCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 	log.Log("TEST: About to terminate, but sleeping 2.5 seconds")
 	time.Sleep(2500*time.Millisecond)
-	c.Terminate()
+	//c.Terminate()
 	log.Log("TEST: We just terminated. How do you feel? Sleep 2.5 seconds.")
 	time.Sleep(2500*time.Millisecond)
 	outputBuffer, _ := c.Start(logFile)
