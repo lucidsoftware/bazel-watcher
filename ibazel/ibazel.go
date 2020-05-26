@@ -614,7 +614,7 @@ func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength 
 	time.Sleep(2500*time.Millisecond)
 	for _, target := range targets {
 		fmt.Println("TEST: outputBuffers", outputBuffers)
-		fmt.Println("target", target, "i.cmds[target]",i.cmds[target], "i.logFiles[target]", i.logFiles[target])
+		fmt.Println("TEST: target", target, "i.cmds[target]",i.cmds[target], "i.logFiles[target]", i.logFiles[target])
 		log.Logf("Sleeping 2.5 seconds")
 		time.Sleep(2500*time.Millisecond)
 		
