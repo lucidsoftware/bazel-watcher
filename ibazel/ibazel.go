@@ -442,6 +442,15 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		} else {
 			torun = targets
 		}
+		if i.cmds != nil {
+			log.Logf("TEST: We are about to terminate everything! Sleeping 2.5 seconds")
+			time.Sleep(2500*time.Millisecond)
+			for _, target := range targets {
+				log.Logf("target is", target)
+				i.cmds[target].Terminate()
+			}
+		}
+		
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		fmt.Println("TEST: beforeCommand", torun, command)
 		log.Logf("Sleeping 2.5 second")
