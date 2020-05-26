@@ -591,6 +591,7 @@ func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength 
 	}
 	i.firstBuildPassed = true
 	if i.cmds == nil {
+		log.Logf("i.cmds is nil")
 		i.cmds = make(map[string]command.Command)
 		i.logFiles = make(map[string]*os.File)
 		// If the commands are empty, we are in our first pass through the state
@@ -613,8 +614,10 @@ func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength 
 	time.Sleep(2500*time.Millisecond)
 	for _, target := range targets {
 		fmt.Println("TEST: outputBuffers", outputBuffers)
+		fmt.Println("target", target, "i.cmds[target]",i.cmds[target], "i.logFiles[target]", i.logFiles[target])
 		log.Logf("Sleeping 2.5 seconds")
 		time.Sleep(2500*time.Millisecond)
+		
 		outputBuffers = append(outputBuffers, i.cmds[target].NotifyOfChanges(i.logFiles[target]))
 	}
 	fmt.Println("TEST: FINISHED w/ outputBuffers", outputBuffers)
