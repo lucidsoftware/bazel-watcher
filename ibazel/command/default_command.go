@@ -80,8 +80,11 @@ func (c *defaultCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
-func (c *defaultCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
+func (c *defaultCommand) BeforeRebuild() {
 	c.Terminate()
+}
+
+func (c *defaultCommand) AfterRebuild(logFile *os.File) *bytes.Buffer {
 	outputBuffer, _ := c.Start(logFile)
 	return outputBuffer
 }
