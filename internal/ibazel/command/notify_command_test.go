@@ -52,11 +52,11 @@ func TestNotifyCommand(t *testing.T) {
 	bazelNew = func() bazel.Bazel { return b }
 	defer func() { bazelNew = oldBazelNew }()
 
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	b.BuildError(errors.New("Demo error"))
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	b.BuildError(nil)
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 
 	b.AssertActions(t, [][]string{
 		{"SetStartupArgs"},
@@ -120,14 +120,14 @@ func TestNotifyCommand_Restart(t *testing.T) {
 		t.Errorf("new subprocess shouldn't have been started yet. State: %v", pg.RootProcess().ProcessState)
 	}
 
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	if c.IsSubprocessRunning() {
 		t.Errorf("process should not start with build errors. State: %v", pg.RootProcess().ProcessState)
 	}
 
 	// Since the process isn't currently running, this should start it.
 	b.BuildError(nil)
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	if !c.IsSubprocessRunning() {
 		t.Errorf("subprocess should have started. State: %v", pg.RootProcess().ProcessState)
 	}
@@ -140,14 +140,14 @@ func TestNotifyCommand_Restart(t *testing.T) {
 	}
 
 	b.BuildError(errors.New("Demo error"))
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	if c.IsSubprocessRunning() {
 		t.Errorf("subprocess should not restart with build errors. State: %v", pg.RootProcess().ProcessState)
 	}
 
 	// Since the process isn't currently running, this should re-start it.
 	b.BuildError(nil)
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	if !c.IsSubprocessRunning() {
 		t.Errorf("subprocess should have been restarted. State: %v", pg.RootProcess().ProcessState)
 	}
@@ -157,7 +157,7 @@ func TestNotifyCommand_Restart(t *testing.T) {
 		t.Error("PIDs of restarted process should be different that original process")
 	}
 
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	if pid2 != c.pg.RootProcess().Process.Pid {
 		t.Error("non-dead process was restarted")
 	}
