@@ -200,7 +200,7 @@ func handle(i *IBazel, command string, args []string) {
 	case "mrun":
 		fmt.Println("\nTEST: We are running 'mrun'")
 		fmt.Println(args, targets, debugArgs)
-		i.RunMulitple(args, targets, debugArgs)
+		i.RunMultiple(args, targets, debugArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "Asked me to perform %s. I don't know how to do that.", command)
 		usage()
