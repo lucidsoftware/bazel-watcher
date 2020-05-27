@@ -88,6 +88,13 @@ func (c *notifyCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
+func (c *notifyCommand) RestartProcess() {
+	_, err := c.stdin.Write([]byte("IBAZEL_BUILD_STARTED\n"))
+	if err != nil {
+		log.Errorf("Error writing build to stdin: %s", err)
+	}
+}
+
 func (c *notifyCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 	b := bazelNew()
 	b.SetStartupArgs(c.startupArgs)
@@ -95,11 +102,6 @@ func (c *notifyCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
 
 	b.WriteToStderr(true)
 	b.WriteToStdout(true)
-
-	_, err := c.stdin.Write([]byte("IBAZEL_BUILD_STARTED\n"))
-	if err != nil {
-		log.Errorf("Error writing build to stdin: %s", err)
-	}
 
 	outputBuffer, res := b.Build(c.target)
 	if res != nil {

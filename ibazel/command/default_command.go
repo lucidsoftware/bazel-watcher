@@ -80,15 +80,14 @@ func (c *defaultCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	log.Log("Starting...")
 	return outputBuffer, nil
 }
+func (c *defaultCommand) RestartProcess() {
+	c.Terminate()
+}
 
 func (c *defaultCommand) NotifyOfChanges(logFile *os.File) *bytes.Buffer {
-	log.Log("TEST: About to terminate, but sleeping 2.5 seconds")
-	time.Sleep(2500*time.Millisecond)
-	//c.Terminate()
-	log.Log("TEST: We just terminated. How do you feel? Sleep 2.5 seconds.")
-	time.Sleep(2500*time.Millisecond)
 	outputBuffer, _ := c.Start(logFile)
 	log.Log("TEST: Whoa. WHOA. We just did the c.Start(), can you start server? Sleep 2.5 seconds.")
+	time.Sleep(2500*time.Millisecond)
 	return outputBuffer
 }
 

@@ -447,7 +447,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			time.Sleep(2500*time.Millisecond)
 			for _, target := range targets {
 				log.Logf("target is", target)
-				i.cmds[target].Terminate()
+				i.cmds[target].RestartProcess()
 			}
 		}
 		
@@ -584,6 +584,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	}
 
 	log.Logf("Notifying of changes")
+	i.cmd.RestartProcess()
 	outputBuffer := i.cmd.NotifyOfChanges(nil)
 	return outputBuffer, nil
 }
