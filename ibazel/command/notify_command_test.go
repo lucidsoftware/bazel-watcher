@@ -49,11 +49,11 @@ func TestNotifyCommand(t *testing.T) {
 	bazelNew = func() bazel.Bazel { return b }
 	defer func() { bazelNew = oldBazelNew }()
 
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	b.BuildError(errors.New("Demo error"))
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 	b.BuildError(nil)
-	c.NotifyOfChanges(nil)
+	c.AfterRebuild(nil)
 
 	b.AssertActions(t, [][]string{
 		{"WriteToStderr"},

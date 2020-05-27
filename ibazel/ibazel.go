@@ -439,6 +439,13 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			torun = targets
 		}
 		
+		// For targets that need to be terminated and rebuilt, this calls the terminate part as soon as we know, so old code won't be re-served
+		if i.cmds != nil {
+			for _, target := range torun {
+				i.cmds[target].BeforeRebuild()
+			}
+		}
+		
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
@@ -563,7 +570,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	}
 
 	log.Logf("Notifying of changes")
-	outputBuffer := i.cmd.NotifyOfChanges(nil)
+	outputBuffer := i.cmd.AfterRebuild(nil)
 	return outputBuffer, nil
 }
 
@@ -596,7 +603,7 @@ func (i *IBazel) runMultiple(targets []string, debugArgs [][]string, argsLength 
 	}
 	log.Logf("Notifying of changes")
 	for _, target := range targets {
-		outputBuffers = append(outputBuffers, i.cmds[target].NotifyOfChanges(i.logFiles[target]))
+		outputBuffers = append(outputBuffers, i.cmds[target].AfterRebuild(i.logFiles[target]))
 	}
 	return outputBuffers, nil
 }
