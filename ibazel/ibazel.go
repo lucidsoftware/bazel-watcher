@@ -282,10 +282,10 @@ func (i *IBazel) Run(target string, args []string) error {
 }
 
 // Run the specified target (singular) in the IBazel loop.
-func (i *IBazel) RunMulitple(args, target []string, debugArgs [][]string) error {
+func (i *IBazel) RunMultiple(args, target []string, debugArgs [][]string) error {
 	i.args = args
 	argsLength := len(args)
-	return i.loopMultiple("run", i.runMulitple, target, debugArgs, argsLength)
+	return i.loopMultiple("run", i.runMultiple, target, debugArgs, argsLength)
 }
 
 // Build the specified targets in the IBazel loop.
@@ -567,7 +567,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 	return outputBuffer, nil
 }
 
-func (i *IBazel) runMulitple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
+func (i *IBazel) runMultiple(targets []string, debugArgs [][]string, argsLength int) ([]*bytes.Buffer, error) {
 	var outputBuffers []*bytes.Buffer
 	log.Logf("Rebuilding changed targets")
 	outputBufferBuild, errBuild := i.build(targets...)
