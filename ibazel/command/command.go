@@ -35,7 +35,8 @@ var bazelNew = bazel.New
 type Command interface {
 	Start(logFile *os.File) (*bytes.Buffer, error)
 	Terminate()
-	NotifyOfChanges(logFile *os.File) *bytes.Buffer
+	BeforeRebuild()
+	AfterRebuild(logFile *os.File) *bytes.Buffer
 	IsSubprocessRunning() bool
 }
 
