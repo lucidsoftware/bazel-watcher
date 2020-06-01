@@ -81,7 +81,9 @@ func (c *defaultCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 }
 
 func (c *defaultCommand) BeforeRebuild() {
-	c.Terminate()
+	if c.pg != nil {
+		c.Terminate()
+	}
 }
 
 func (c *defaultCommand) AfterRebuild(logFile *os.File) *bytes.Buffer {
