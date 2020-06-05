@@ -235,7 +235,7 @@ func (b *bazel) Info() (map[string]string, error) {
 	// This go function only prints if 'bazel info' takes longer than 5 seconds
 	runFinished := false
 	go func() {
-		time.Sleep(5*time.Second)
+		time.Sleep(0.2*time.Second)
 		if !runFinished{
 			log.Logf("Running 'bazel info'...")
 		}
