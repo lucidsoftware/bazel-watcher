@@ -157,23 +157,19 @@ func matchRegex(optcmd []Optcmd, output *bytes.Buffer) ([]string, []string, [][]
 	return commandLines, commands, args
 }
 
+var captureGroupReferenceRegex = regexp.MustCompile("\\$\\d+")
+
 func convertArg(matches []string, arg string) string {
-	if strings.HasPrefix(arg, "$") {
-		val, _ := strconv.Atoi(arg[1:])
-		return matches[val]
-	}
-	return arg
+	return captureGroupReferenceRegex.ReplaceAllStringFunc(arg, func(s string) string {
+		i, _ := strconv.Atoi(s[1:])
+		return matches[i]
+	})
 }
 
 func convertArgs(matches []string, args []string) []string {
 	var rst []string
-	for i, _ := range args {
-		if strings.HasPrefix(args[i], "$") {
-			val, _ := strconv.Atoi(args[i][1:])
-			rst = append(rst, matches[val])
-		} else {
-			rst = append(rst, args[i])
-		}
+	for _, arg := range args {
+		rst = append(rst, convertArg(matches, arg))
 	}
 	return rst
 }

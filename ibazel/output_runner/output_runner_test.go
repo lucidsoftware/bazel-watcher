@@ -48,6 +48,7 @@ func TestConvertArgs(t *testing.T) {
 		{[]string{"$2", "$3", "$4"}, []string{"my_arg1", "my_arg2", "my_arg3"}},
 		{[]string{"$2", "dont_change_arg"}, []string{"my_arg1", "dont_change_arg"}},
 		{[]string{"keep_arg", "$3"}, []string{"keep_arg", "my_arg2"}},
+		{[]string{"$2 foo $3", "$4"}, []string{"my_arg1 foo my_arg2", "my_arg3"}},
 	} {
 		new_cmd := convertArgs(matches, c.cmd)
 		if !reflect.DeepEqual(c.truth, new_cmd) {
@@ -92,11 +93,13 @@ func TestMatchRegex(t *testing.T) {
 	buf.WriteString("buildozer 'add deps test_dep1' //target1:target1\n")
 	buf.WriteString("buildozer 'add deps test_dep2' //target2:target2\n")
 	buf.WriteString("buildifier 'cmd_nvm' //target_nvm:target_nvm\n")
+	buf.WriteString("foo 'add deps test_dep4' //target4:target4\n")
 	buf.WriteString("not_a_match 'nvm' //target_nvm:target_nvm\n")
 
 	optcmd := []Optcmd{
 		{Regex: "^(buildozer) '(.*)'\\s+(.*)$", Command: "$1", Args: []string{"$2", "$3"}},
 		{Regex: "^(buildifier) '(.*)'\\s+(.*)$", Command: "test_cmd", Args: []string{"test_arg1", "test_arg2"}},
+		{Regex: "^(foo) '(.*) deps (.*)'\\s+(.*)$", Command: "$1", Args: []string{"$2 deps_special $3", "$4"}},
 	}
 
 	_, commands, args := matchRegex(optcmd, &buf)
@@ -109,6 +112,7 @@ func TestMatchRegex(t *testing.T) {
 		{"buildozer 'add deps test_dep1' //target1:target1", "buildozer", []string{"add deps test_dep1", "//target1:target1"}},
 		{"buildozer 'add deps test_dep2' //target2:target2", "buildozer", []string{"add deps test_dep2", "//target2:target2"}},
 		{"buildifier 'cmd_nvm' //target_nvm:target_nvm", "test_cmd", []string{"test_arg1", "test_arg2"}},
+		{"foo 'add deps test_dep4' //target4:target4", "foo", []string{"add deps_special test_dep4", "//target4:target4"}},
 	} {
 		if !reflect.DeepEqual(c.cs, commands[idx]) {
 			t.Errorf("Commands not equal: %v\nGot:  %v\nWant: %v",
