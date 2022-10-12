@@ -366,6 +366,7 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 			i.state = RUN
 		}
 	case RUN:
+		i.cmd.BeforeRebuild()
 		log.Logf("%s %s", strings.Title(verb(command)), joinedTargets)
 		i.beforeCommand(targets, command)
 		outputBuffer, err := commandToRun(targets...)
