@@ -43,6 +43,11 @@ var osExit = os.Exit
 var bazelNew = bazel.New
 var commandDefaultCommand = command.DefaultCommand
 var commandNotifyCommand = command.NotifyCommand
+var exitMessages = map[os.Signal]string{
+	syscall.SIGINT:  "Subprocess killed from getting SIGINT (trigger SIGINT again to stop ibazel)",
+	syscall.SIGTERM: "Subprocess killed from getting SIGTERM",
+	syscall.SIGHUP:  "Subprocess killed from getting SIGHUP",
+}
 var mrunToFiles = flag.Bool("mrunToFiles", false, "Log mrun to file for simpler log reading")
 
 type State string
@@ -139,56 +144,46 @@ func (i *IBazel) handleSignals() {
 	// Got an OS signal (SIGINT, SIGTERM, SIGHUP).
 	sig := <-i.sigs
 
-	switch sig {
-	case syscall.SIGINT:
-		for _, cmd := range i.cmds {
-			if cmd.IsSubprocessRunning() {
-				cmd.Terminate()
-			}
-		}
-		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
-			log.NewLine()
-			log.Log("Subprocess killed from getting SIGINT (trigger SIGINT again to stop ibazel)")
-			i.cmd.Terminate()
-		} else {
-			osExit(3)
-		}
-		break
-	case syscall.SIGTERM:
-		for _, cmd := range i.cmds {
-			if cmd.IsSubprocessRunning() {
-				cmd.Terminate()
-			}
-		}
-		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
-			log.NewLine()
-			log.Log("Subprocess killed from getting SIGTERM")
-			i.cmd.Terminate()
-		}
+	if i.cmd == nil || !i.cmd.IsSubprocessRunning() {
 		osExit(3)
 		return
-	case syscall.SIGHUP:
-		for _, cmd := range i.cmds {
-			if cmd.IsSubprocessRunning() {
-				cmd.Terminate()
-			}
-		}
-		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
-			log.NewLine()
-			log.Log("Subprocess killed from getting SIGHUP")
-			i.cmd.Terminate()
-		}
-		osExit(3)
-		return
-	default:
-		log.Fatal("Got a signal that wasn't handled. Please file a bug against bazel-watcher that describes how you did this. This is a big problem.")
 	}
 
-	i.interruptCount += 1
-	if i.interruptCount > 2 {
-		log.NewLine()
-		log.Fatal("Exiting from getting SIGINT 3 times")
-		osExit(3)
+	switch sig {
+	case syscall.SIGINT:
+		i.interruptCount++
+		switch {
+		case i.interruptCount > 2:
+			log.NewLine()
+			log.Fatal("Exiting from getting SIGINT 3 times")
+			osExit(3)
+		case i.interruptCount > 1:
+			for _, cmd := range i.cmds {
+				cmd.Kill()
+			}
+			i.cmd.Kill()
+		default:
+			go func() {
+				for _, cmd := range i.cmds {
+					cmd.Terminate()
+				}
+				i.cmd.Terminate()
+				log.NewLine()
+				log.Log(exitMessages[sig])
+			}()
+		}
+	case syscall.SIGTERM, syscall.SIGHUP:
+		go func() {
+			for _, cmd := range i.cmds {
+				cmd.Terminate()
+			}
+			i.cmd.Terminate()
+			log.NewLine()
+			log.Log(exitMessages[sig])
+			osExit(3)
+		}()
+	default:
+		log.Fatal("Got a signal that wasn't handled. Please file a bug against bazel-watcher that describes how you did this. This is a big problem.")
 	}
 }
 
@@ -370,6 +365,7 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 		log.Logf("%s %s", strings.Title(verb(command)), joinedTargets)
 		i.beforeCommand(targets, command)
 		outputBuffer, err := commandToRun(targets...)
+		i.interruptCount = 0
 		i.afterCommand(targets, command, err == nil, outputBuffer)
 		i.state = WAIT
 	}
@@ -445,10 +441,11 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		} else {
 			torun = targets
 		}
-		
+
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
+		i.interruptCount = 0
 		for _, buffer := range outputBuffers {
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
@@ -551,7 +548,7 @@ func (i *IBazel) setupRun(target string, debugArg []string, argsLength int) comm
 		if len(debugArg) > 0 {
 			i.args = append(debugArg, i.args[len(i.args)-argsLength:len(i.args)]...)
 		} else if argsLength > -1 {
-			i.args = i.args[len(i.args)-argsLength:len(i.args)]
+			i.args = i.args[len(i.args)-argsLength : len(i.args)]
 		}
 		return commandDefaultCommand(i.startupArgs, i.bazelArgs, target, i.args)
 	}
@@ -776,7 +773,7 @@ func dirWatchedByTarget(toWatchByTarget map[string][]string, targets []string, d
 			if len(dirStorage[dir]) == 0 {
 				delete(dirStorage, dir)
 			}
-			
+
 		}
 	}
 
@@ -804,7 +801,7 @@ func containsIdx(l []string, e string) int {
 // Delete idx element in string array a
 func deleteIdx(a []string, idx int) []string {
 	a[idx] = a[len(a)-1] // Copy last element to index i.
-	a[len(a)-1] = ""   // Erase last element (write zero value).
+	a[len(a)-1] = ""     // Erase last element (write zero value).
 	a = a[:len(a)-1]
 	return a
 }

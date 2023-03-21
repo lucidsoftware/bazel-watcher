@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !windows
 // +build !windows
 
 package process_group
@@ -41,8 +42,11 @@ func (pg *unixProcessGroup) Start() error {
 	return pg.root.Start()
 }
 
-func (pg *unixProcessGroup) Kill() error {
-	return syscall.Kill(-pg.root.Process.Pid, syscall.SIGKILL)
+func (pg *unixProcessGroup) Signal(signum syscall.Signal) error {
+	// Send the signal to the process PID which should propagate down to any
+	// subprocesses in the PGID (Process Group ID). To send to the PGID, send the
+	// singal to the negative of the process ID.
+	return syscall.Kill(-pg.root.Process.Pid, signum)
 }
 
 func (pg *unixProcessGroup) Wait() error {
