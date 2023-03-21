@@ -98,6 +98,8 @@ func (m *mockCommand) Start(logFile *os.File) (*bytes.Buffer, error) {
 	m.started = true
 	return nil, nil
 }
+func (m *mockCommand) BeforeRebuild() {
+}
 func (m *mockCommand) AfterRebuild(logFile *os.File) *bytes.Buffer {
 	m.notifiedOfChanges = true
 	return nil
