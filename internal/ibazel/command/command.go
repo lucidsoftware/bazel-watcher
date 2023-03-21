@@ -37,7 +37,8 @@ var (
 	waitDuration = flag.Duration(
 		"graceful_termination_wait_duration",
 		10*time.Second,
-		"Specify the duration to wait for a graceful termination before sending SIGKILL to the subprocess")
+		"Specify the duration to wait for a graceful termination before sending SIGKILL to the subprocess",
+	)
 )
 
 // Command is an object that wraps the logic of running a task in Bazel and

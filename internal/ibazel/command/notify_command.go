@@ -98,7 +98,6 @@ func (c *notifyCommand) BeforeRebuild() {
 	}
 }
 
-
 func (c *notifyCommand) AfterRebuild(logFile *os.File) *bytes.Buffer {
 	b := bazelNew()
 	b.SetStartupArgs(c.startupArgs)

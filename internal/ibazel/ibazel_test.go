@@ -464,6 +464,7 @@ func TestHandleSignals_SIGINTWithoutRunningCommand(t *testing.T) {
 	i.sigs = make(chan os.Signal, 1)
 	defer i.Cleanup()
 
+	// But we want to simulate the subprocess not dying
 	osExitChan := make(chan int, 1)
 	osExit = func(i int) {
 		osExitChan <- i
@@ -582,7 +583,7 @@ func TestHandleSignals_SIGINTHitLimitTermination(t *testing.T) {
 		didTermChan: make(chan struct{}, 1),
 	}
 	i.cmd = cmd
-	cmd.Start()
+	cmd.Start(nil)
 
 	// First ctrl-c sends custom signal (SIGTERM)
 	i.sigs <- syscall.SIGINT
@@ -624,7 +625,7 @@ func TestHandleSignals_SIGTERM(t *testing.T) {
 		didTermChan: make(chan struct{}, 1),
 	}
 	i.cmd = cmd
-	cmd.Start()
+	cmd.Start(nil)
 
 	i.sigs <- syscall.SIGTERM
 	i.handleSignals()

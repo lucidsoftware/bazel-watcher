@@ -153,7 +153,6 @@ func (i *IBazel) handleSignals() {
 
 	switch sig {
 	case syscall.SIGINT:
-
 		i.interruptCount++
 		switch {
 		case i.interruptCount > 2:
@@ -457,10 +456,11 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		} else {
 			torun = targets
 		}
-		
+
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
 		i.beforeCommand(torun, command)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
+		i.interruptCount = 0
 		for _, buffer := range outputBuffers {
 			i.afterCommand(torun, command, err == nil, buffer)
 		}
@@ -587,7 +587,7 @@ func (i *IBazel) setupRun(target string, debugArg []string, argsLength int) comm
 		if len(debugArg) > 0 {
 			i.args = append(debugArg, i.args[len(i.args)-argsLength:len(i.args)]...)
 		} else if argsLength > -1 {
-			i.args = i.args[len(i.args)-argsLength:len(i.args)]
+			i.args = i.args[len(i.args)-argsLength : len(i.args)]
 		}
 		return commandDefaultCommand(i.startupArgs, i.bazelArgs, target, i.args)
 	}
@@ -886,7 +886,7 @@ func containsIdx(l []string, e string) int {
 // Delete idx element in string array a
 func deleteIdx(a []string, idx int) []string {
 	a[idx] = a[len(a)-1] // Copy last element to index i.
-	a[len(a)-1] = ""   // Erase last element (write zero value).
+	a[len(a)-1] = ""     // Erase last element (write zero value).
 	a = a[:len(a)-1]
 	return a
 }
