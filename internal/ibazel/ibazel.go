@@ -142,11 +142,52 @@ func New(version string) (*IBazel, error) {
 	return i, nil
 }
 
+func (i *IBazel) isAnyCmdRunning() bool {
+	if i.cmd != nil && i.cmd.IsSubprocessRunning() {
+		return true
+	} else if i.cmds != nil {
+		for _, cmd := range i.cmds {
+			if cmd.IsSubprocessRunning() {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (i *IBazel) terminateAllCmds() {
+	if i.cmd != nil {
+		i.cmd.Terminate()
+	}
+	if i.cmds != nil {
+		for _, cmd := range i.cmds {
+			// Terminating a Command is potentially slow as we wait for the Command to gracefully terminate or
+			// waitDuration to elapse. Thus, we start a new goroutine for each so that this waiting can happen in
+			// parallel.
+			go func(cmd command.Command) {
+				cmd.Terminate()
+			}(cmd)
+		}
+	}
+}
+
+func (i *IBazel) killAllCmds() {
+	if i.cmd != nil {
+		i.cmd.Kill()
+	}
+	if i.cmds != nil {
+		for _, cmd := range i.cmds {
+			cmd.Kill()
+		}
+	}
+}
+
 func (i *IBazel) handleSignals() {
 	// Got an OS signal (SIGINT, SIGTERM, SIGHUP).
 	sig := <-i.sigs
 
-	if i.cmd == nil || !i.cmd.IsSubprocessRunning() {
+	if !i.isAnyCmdRunning() {
 		osExit(3)
 		return
 	}
@@ -160,38 +201,19 @@ func (i *IBazel) handleSignals() {
 			log.Fatal("Exiting from getting SIGINT 3 times")
 			osExit(3)
 		case i.interruptCount > 1:
-			for _, cmd := range i.cmds {
-				if cmd.IsSubprocessRunning() {
-					cmd.Kill()
-				}
-			}
-			i.cmd.Kill()
+			i.killAllCmds()
 		default:
 			go func() {
-				for _, cmd := range i.cmds {
-					if cmd.IsSubprocessRunning() {
-						cmd.Terminate()
-					}
-				}
-				if i.cmd != nil && i.cmd.IsSubprocessRunning() {
-					i.cmd.Terminate()
-					log.NewLine()
-					log.Log(exitMessages[sig])
-				}
+				i.terminateAllCmds()
+				log.NewLine()
+				log.Log(exitMessages[sig])
 			}()
 		}
 		break
 
 	case syscall.SIGTERM, syscall.SIGHUP:
 		go func() {
-			for _, cmd := range i.cmds {
-				if cmd.IsSubprocessRunning() {
-					cmd.Terminate()
-				}
-			}
-			if i.cmd != nil && i.cmd.IsSubprocessRunning() {
-				i.cmd.Terminate()
-			}
+			i.terminateAllCmds()
 			log.NewLine()
 			log.Log(exitMessages[sig])
 			osExit(3)
