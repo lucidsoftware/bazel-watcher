@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -161,14 +162,18 @@ func (i *IBazel) terminateAllCmds() {
 		i.cmd.Terminate()
 	}
 	if i.cmds != nil {
+		var wg sync.WaitGroup
 		for _, cmd := range i.cmds {
 			// Terminating a Command is potentially slow as we wait for the Command to gracefully terminate or
 			// waitDuration to elapse. Thus, we start a new goroutine for each so that this waiting can happen in
-			// parallel.
+			// parallel. The WaitGroup is to ensure that all Commands have ended before handleSignals might exit ibazel.
+			wg.Add(1)
 			go func(cmd command.Command) {
+				defer wg.Done()
 				cmd.Terminate()
 			}(cmd)
 		}
+		wg.Wait()
 	}
 }
 
