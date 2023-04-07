@@ -473,17 +473,17 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 			i.state = RUN
 		}
 	case RUN:
-		if i.cmds != nil {
-			for _, target := range targets {
-				i.cmds[target].BeforeRebuild()
-			}
-		}
-
 		var torun []string
 		if i.prevDir != "" && i.firstBuildPassed {
 			torun = i.srcDirToWatch[i.prevDir]
 		} else {
 			torun = targets
+		}
+
+		if i.cmds != nil {
+			for _, target := range torun {
+				i.cmds[target].BeforeRebuild()
+			}
 		}
 
 		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
