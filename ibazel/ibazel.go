@@ -419,12 +419,14 @@ func (i *IBazel) iterationMultiple(commandString string, commandToRun runnableCo
 			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
 				log.Logf("\nChanged: %q. Rebuilding...", e.Name)
 				i.changeDetected(targets, "source", e.Name)
+				i.prevDir, _ = filepath.Split(e.Name)
 				i.state = DEBOUNCE_RUN
 			}
 		case e := <-i.buildFileWatcher.Events():
 			if _, ok := i.filesWatched[i.buildFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
 				log.Logf("\nBuild graph changed: %q. Requerying...", e.Name)
 				i.changeDetected(targets, "graph", e.Name)
+				i.prevDir, _ = filepath.Split(e.Name)
 				i.state = DEBOUNCE_QUERY
 			}
 		}
