@@ -410,7 +410,7 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 	}
 }
 
-func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
+func (i *IBazel) iterationMultiple(commandString string, commandToRun runnableCommands, targets []string, debugArgs [][]string, argsLength int) {
 	log.Logf("State: %s", i.state)
 	switch i.state {
 	case WAIT:
@@ -476,17 +476,24 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		}
 
 		if i.cmds != nil {
+			var wg sync.WaitGroup
 			for _, target := range torun {
-				i.cmds[target].BeforeRebuild()
+				// BeforeRebuild terminates the target command, which can take a while. We want to kick these off in parallel
+				wg.Add(1)
+				go func(cmd command.Command) {
+					defer wg.Done()
+					cmd.BeforeRebuild()
+				}(i.cmds[target])
 			}
+			wg.Wait()
 		}
 
-		log.Logf("%s %s", strings.Title(verb(command)), strings.Join(torun, " "))
-		i.beforeCommand(torun, command)
+		log.Logf("%s %s", strings.Title(verb(commandString)), strings.Join(torun, " "))
+		i.beforeCommand(torun, commandString)
 		outputBuffers, err := commandToRun(torun, debugArgs, argsLength)
 		i.interruptCount = 0
 		for _, buffer := range outputBuffers {
-			i.afterCommand(torun, command, err == nil, buffer)
+			i.afterCommand(torun, commandString, err == nil, buffer)
 		}
 		i.prevDir = ""
 		i.state = WAIT
