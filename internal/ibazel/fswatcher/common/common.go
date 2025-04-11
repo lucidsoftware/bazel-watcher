@@ -30,5 +30,6 @@ const Chmod = fsnotify.Chmod
 type Watcher interface {
 	Close() error
 	UpdateAll(name []string) error
+	Remove(name string) error
 	Events() chan Event
 }

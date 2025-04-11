@@ -23,8 +23,8 @@ import (
 )
 
 type mockFSNotifyWatcher struct {
-	recentlyAddedFiles   map[string]struct{}
-	recentlyRemovedFiles map[string]struct{}
+	recentlyAddedFiles   map[string][]string
+	recentlyRemovedFiles map[string][]string
 	closed               bool
 }
 
@@ -32,14 +32,14 @@ func (w *mockFSNotifyWatcher) Add(name string) error {
 	if _, ok := w.recentlyAddedFiles[name]; ok {
 		return errors.New("Already added file " + name)
 	}
-	w.recentlyAddedFiles[name] = struct{}{}
+	w.recentlyAddedFiles[name] = []string{}
 	return nil
 }
 func (w *mockFSNotifyWatcher) Remove(name string) error {
 	if _, ok := w.recentlyRemovedFiles[name]; ok {
 		return errors.New("Already removed file " + name)
 	}
-	w.recentlyRemovedFiles[name] = struct{}{}
+	w.recentlyRemovedFiles[name] = []string{}
 	return nil
 }
 func (w *mockFSNotifyWatcher) Close() error {
@@ -54,8 +54,8 @@ func (w *mockFSNotifyWatcher) Events() chan fsnotify.Event {
 }
 
 func (w *mockFSNotifyWatcher) Reset() {
-	w.recentlyAddedFiles = make(map[string]struct{}, 0)
-	w.recentlyRemovedFiles = make(map[string]struct{}, 0)
+	w.recentlyAddedFiles = make(map[string][]string, 0)
+	w.recentlyRemovedFiles = make(map[string][]string, 0)
 	w.closed = false
 }
 
@@ -179,7 +179,7 @@ OUTER:
 	return "", true
 }
 
-func keys(m map[string]struct{}) []string {
+func keys(m map[string][]string) []string {
 	keys := make([]string, len(m))
 	i := 0
 	for k := range m {

@@ -83,6 +83,17 @@ func (w *realFSNotifyWatcher) UpdateAll(names []string) error {
 	return nil
 }
 
+func (w *realFSNotifyWatcher) Remove(name string) error {
+	for name, _ := range w.watched {
+		err := w.wrapper.Remove(name)
+		if err != nil {
+			return fmt.Errorf("Error unwatching file %q error: %v\n", name, err)
+		}
+		delete(w.watched, name)
+	}
+	return nil
+}
+
 // Close implements ibazel/fswatcher/common.Watcher
 func (w *realFSNotifyWatcher) Close() error {
 	return w.wrapper.Close()

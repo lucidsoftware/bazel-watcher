@@ -90,7 +90,7 @@ type IBazel struct {
 	buildFileWatcher  common.Watcher
 	sourceFileWatcher common.Watcher
 
-	filesWatched map[common.Watcher]map[string]struct{} // Inner map is a surrogate for a set
+	filesWatched map[common.Watcher]map[string][]string // Inner map is a surrogate for a set
 
 	lifecycleListeners []Lifecycle
 
@@ -106,7 +106,7 @@ func New(version string) (*IBazel, error) {
 
 	i.firstBuildPassed = false
 	i.debounceDuration = 100 * time.Millisecond
-	i.filesWatched = map[common.Watcher]map[string]struct{}{}
+	i.filesWatched = map[common.Watcher]map[string][]string{}
 	i.workspaceFinder = &workspace.MainWorkspace{}
 
 	i.srcDirToWatch = map[string][]string{}
@@ -420,7 +420,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 	switch i.state {
 	case WAIT:
 		select {
-		case e := <-i.sourceEventHandler.SourceFileEvents:
+		case e := <-i.sourceFileWatcher.Events():
 			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
 				log.Logf("\nChanged: %q. Rebuilding...", e.Name)
 				i.changeDetected(targets, "source", e.Name)
@@ -463,7 +463,7 @@ func (i *IBazel) iterationMultiple(command string, commandToRun runnableCommands
 		i.state = RUN
 	case DEBOUNCE_RUN:
 		select {
-		case e := <-i.sourceEventHandler.SourceFileEvents:
+		case e := <-i.sourceFileWatcher.Events():
 			if _, ok := i.filesWatched[i.sourceFileWatcher][e.Name]; ok && e.Op&modifyingEvents != 0 {
 				i.changeDetected(targets, "source", e.Name)
 			}
@@ -767,7 +767,8 @@ func (i *IBazel) watchFiles(query string, watcher common.Watcher) {
 		return
 	}
 
-	filesWatched := map[string]struct{}{}
+	filesFound := map[string][]string{}
+	filesWatched := map[string][]string{}
 	uniqueDirectories := map[string][]string{}
 
 	i.watcherAdd(query, watcher, toWatch, filesFound, filesWatched, uniqueDirectories)
@@ -775,10 +776,10 @@ func (i *IBazel) watchFiles(query string, watcher common.Watcher) {
 	i.watcherRemove(uniqueDirectories, watcher, filesWatched)
 }
 
-func (i *IBazel) watchManyFiles(query string, targets []string, watcher fSNotifyWatcher, dirStorage *map[string][]string) {
+func (i *IBazel) watchManyFiles(query string, targets []string, watcher common.Watcher, dirStorage *map[string][]string) {
 	toWatchByTarget := map[string][]string{}
-	filesFound := map[string]struct{}{}
-	filesWatched := map[string]struct{}{}
+	filesFound := map[string][]string{}
+	filesWatched := map[string][]string{}
 	uniqueDirectories := map[string][]string{}
 
 	for _, target := range targets {
@@ -799,7 +800,7 @@ func (i *IBazel) watchManyFiles(query string, targets []string, watcher fSNotify
 	i.watcherRemove(*dirStorage, watcher, filesWatched)
 }
 
-func (i *IBazel) watcherAdd(query string, watcher fSNotifyWatcher, toWatch []string, filesFound map[string]struct{}, filesWatched map[string]struct{}, uniqueDirectories map[string][]string) {
+func (i *IBazel) watcherAdd(query string, watcher common.Watcher, toWatch []string, filesFound map[string][]string, filesWatched map[string][]string, uniqueDirectories map[string][]string) {
 	for _, file := range toWatch {
 		path, err := filepath.EvalSymlinks(file)
 		if err != nil {
@@ -808,7 +809,7 @@ func (i *IBazel) watcherAdd(query string, watcher fSNotifyWatcher, toWatch []str
 		}
 
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			filesWatched[path] = struct{}{}
+			filesWatched[path] = []string{}
 		}
 
 		parentDirectory, _ := filepath.Split(path)
@@ -817,7 +818,7 @@ func (i *IBazel) watcherAdd(query string, watcher fSNotifyWatcher, toWatch []str
 	}
 
 	watchList := keys(uniqueDirectories)
-	err = watcher.UpdateAll(watchList)
+	err := watcher.UpdateAll(watchList)
 	if err != nil {
 		log.Errorf("Error(s) updating watch list:\n %v", err)
 	}
@@ -827,7 +828,7 @@ func (i *IBazel) watcherAdd(query string, watcher fSNotifyWatcher, toWatch []str
 	}
 }
 
-func (i *IBazel) watcherRemove(dirWatched map[string][]string, watcher fSNotifyWatcher, filesWatched map[string]struct{}) {
+func (i *IBazel) watcherRemove(dirWatched map[string][]string, watcher common.Watcher, filesWatched map[string][]string) {
 	for file, _ := range i.filesWatched[watcher] {
 		parentDirectory, _ := filepath.Split(file)
 
@@ -868,7 +869,7 @@ func parseTarget(label string) (repo string, target string) {
 	return parts[0], parts[1]
 }
 
-func keys(m map[string]struct{}) []string {
+func keys(m map[string][]string) []string {
 	keys := make([]string, len(m))
 	i := 0
 	for k := range m {

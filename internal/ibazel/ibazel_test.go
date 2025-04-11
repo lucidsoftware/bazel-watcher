@@ -47,6 +47,7 @@ var _ common.Watcher = &fakeFSNotifyWatcher{}
 
 func (w *fakeFSNotifyWatcher) Close() error                   { return nil }
 func (w *fakeFSNotifyWatcher) UpdateAll(names []string) error { return nil }
+func (w *fakeFSNotifyWatcher) Remove(name string) error       { return nil }
 func (w *fakeFSNotifyWatcher) Events() chan common.Event      { return w.EventChan }
 
 var oldCommandDefaultCommand = command.DefaultCommand
@@ -238,8 +239,8 @@ func TestIBazelLoop(t *testing.T) {
 
 	assertState(QUERY)
 	step()
-	i.filesWatched[i.buildFileWatcher] = map[string]struct{}{"/path/to/BUILD": {}}
-	i.filesWatched[i.sourceFileWatcher] = map[string]struct{}{"/path/to/foo": {}}
+	i.filesWatched[i.buildFileWatcher] = map[string][]string{"/path/to/BUILD": {}}
+	i.filesWatched[i.sourceFileWatcher] = map[string][]string{"/path/to/foo": {}}
 	assertState(RUN)
 	step() // Actually run the command
 	assertRun()
@@ -270,13 +271,15 @@ func TestIBazelLoop(t *testing.T) {
 
 
 func TestIBazelLoopMultiple(t *testing.T) {
-	i := newIBazel(t)
+	i, _ := newIBazel(t)
 
 	// Replace the file watching channel with one that has a buffer.
 	i.buildFileWatcher = &fakeFSNotifyWatcher{
-		EventChan: make(chan fsnotify.Event, 1),
+		EventChan: make(chan common.Event, 1),
 	}
-	i.sourceEventHandler.SourceFileEvents = make(chan fsnotify.Event, 1)
+	i.sourceFileWatcher = &fakeFSNotifyWatcher{
+		EventChan: make(chan common.Event, 1),
+	}
 
 	defer i.Cleanup()
 
@@ -314,14 +317,14 @@ func TestIBazelLoopMultiple(t *testing.T) {
 
 	assertState(QUERY)
 	step()
-	i.filesWatched[i.buildFileWatcher] = map[string]struct{}{"/path/to/BUILD": struct{}{}}
-	i.filesWatched[i.sourceFileWatcher] = map[string]struct{}{"/path/to/foo": struct{}{}}
+	i.filesWatched[i.buildFileWatcher] = map[string][]string{"/path/to/BUILD": {}}
+	i.filesWatched[i.sourceFileWatcher] = map[string][]string{"/path/to/foo": {}}
 	assertState(RUN)
 	step() // Actually run the command
 	assertRun()
 	assertState(WAIT)
 	// Source file change.
-	i.sourceEventHandler.SourceFileEvents <- fsnotify.Event{Op: fsnotify.Write, Name: "/path/to/foo"}
+	i.sourceFileWatcher.Events() <- common.Event{Op: common.Write, Name: "/path/to/foo"}
 	step()
 	assertState(DEBOUNCE_RUN)
 	step()
@@ -331,7 +334,7 @@ func TestIBazelLoopMultiple(t *testing.T) {
 	assertRun()
 	assertState(WAIT)
 	// Build file change.
-	i.buildFileWatcher.Events() <- fsnotify.Event{Op: fsnotify.Write, Name: "/path/to/BUILD"}
+	i.buildFileWatcher.Events() <- common.Event{Op: common.Write, Name: "/path/to/BUILD"}
 	step()
 	assertState(DEBOUNCE_QUERY)
 	// Don't send another event in to test the timer

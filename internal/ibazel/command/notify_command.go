@@ -122,7 +122,7 @@ func (c *notifyCommand) AfterRebuild(logFile *os.File) *bytes.Buffer {
 		if !c.IsSubprocessRunning() {
 			log.Log("Restarting process...")
 			c.Terminate()
-			c.Start()
+			c.Start(nil)
 		}
 	}
 	return outputBuffer
