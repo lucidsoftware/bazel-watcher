@@ -87,11 +87,11 @@ func (i *OutputRunner) AfterCommand(targets []string, command string, success bo
 	optcmd := i.readConfigs(jsonCommandPath)
 	if optcmd == nil {
 		optcmd = []Optcmd{defaultRegex}
-		log.Log("using default bazel_fix_commands")
+		// log.Log("using default bazel_fix_commands")
 	}
-	log.Logf("sifting output: %s", output.String())
+	// log.Logf("sifting output: %s", output.String())
 	commandLines, commands, args := matchRegex(optcmd, output)
-	log.Logf("using %d matching commandlines", len(commandLines))
+	// log.Logf("using %d matching commandlines", len(commandLines))
 	for idx, _ := range commandLines {
 		log.Logf("matched command number %d: %v", idx, commands[idx])
 		if *runOutputInteractive {
